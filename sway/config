@@ -88,7 +88,7 @@ client.urgent           #e78284 #e78284 #303446 #e78284   #e78284
     floating_modifier $mod normal
 
     # Reload the configuration file
-    bindsym $mod+Shift+c reload
+    bindsym $mod+Shift+r reload
 
     # Exit sway (logs you out of your Wayland session)
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
@@ -218,6 +218,9 @@ bindsym $mod+r mode "resize"
     bindsym Print exec grim
     bindsym $mod+Print exec grim -g "$(slurp)" - | wl-copy
     bindsym $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
+    # Claude
+    bindsym $mod+c exec foot -e claude
+    bindsym $mod+Shift+c exec ~/.local/bin/claude-prompt
     # Help overlay
     bindsym $mod+Shift+h exec ~/.local/bin/sway-help
 

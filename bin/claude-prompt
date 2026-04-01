@@ -1,0 +1,13 @@
+#!/bin/bash
+# Quick Claude prompt from wofi — type a question, opens Claude in foot with it
+prompt=$(wofi --show dmenu \
+    --prompt "Ask Claude" \
+    --width 500 \
+    --height 40 \
+    --cache-file /dev/null \
+    --lines 0 \
+    --style "$HOME/.config/wofi/style-help.css")
+
+[ -z "$prompt" ] && exit 0
+
+foot -e bash -c "claude \"$prompt\"; exec bash"

@@ -57,6 +57,10 @@ window#waybar {
   color: #f2d5cf;
 }
 
+#custom-claude {
+  color: #ef9f76;
+}
+
 #custom-help {
   color: #babbf1;
 }

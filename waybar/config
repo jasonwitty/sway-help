@@ -4,7 +4,7 @@
 
   "modules-left": ["sway/workspaces"],
   "modules-center": ["clock"],
-  "modules-right": ["custom/help", "pulseaudio", "network", "backlight", "battery", "custom/power", "tray"],
+  "modules-right": ["custom/claude", "custom/help", "pulseaudio", "network", "backlight", "battery", "custom/power", "tray"],
     "pulseaudio": {
     "format": "{icon}  {volume}%",
     "format-muted": "󰝟  muted",
@@ -32,6 +32,12 @@
   "backlight": {
     "format": "  {percent}%",
     "tooltip": false
+  },
+  "custom/claude": {
+    "format": "󰗚 ",
+    "tooltip": false,
+    "on-click": "foot -e claude",
+    "on-click-right": "~/.local/bin/claude-prompt"
   },
   "custom/help": {
     "format": "  ",
