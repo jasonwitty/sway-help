@@ -1,0 +1,179 @@
+#!/bin/bash
+# Parses sway config live and shows keybindings in wofi
+# Always in sync — reads the config every time it runs
+
+CONFIG="$HOME/.config/sway/config"
+
+awk '
+BEGIN {
+    in_mode = ""
+    last_comment = ""
+    saw_ws_switch = 0
+    saw_ws_move = 0
+    # Track actions we have already shown, to collapse arrow duplicates
+}
+
+# Collect variable definitions
+/^set \$/ {
+    varname = $2
+    gsub(/\$/, "", varname)
+    val = $3
+    for (i = 4; i <= NF; i++) val = val " " $i
+    vars[varname] = val
+    next
+}
+
+# Track mode blocks
+/^mode "/ {
+    gsub(/"/, "", $2)
+    in_mode = $2
+    next
+}
+/^\}/ {
+    if (in_mode != "") in_mode = ""
+    next
+}
+
+# Skip comments — do not use as descriptions (we generate our own)
+/^[[:space:]]*#/ { next }
+/^[[:space:]]*$/ { next }
+
+# Parse bindsym lines
+/bindsym/ {
+    line = $0
+    gsub(/^[[:space:]]*/, "", line)
+    sub(/^bindsym[[:space:]]+/, "", line)
+    sub(/--locked[[:space:]]+/, "", line)
+
+    # Split into key and action
+    n = split(line, parts, /[[:space:]]+/)
+    key = parts[1]
+    action = ""
+    for (i = 2; i <= n; i++) {
+        if (i > 2) action = action " "
+        action = action parts[i]
+    }
+
+    # Resolve variables in key
+    for (v in vars) {
+        gsub("\\$" v, vars[v], key)
+    }
+
+    # Prettify modifier names
+    gsub(/Mod4/, "Mod", key)
+    gsub(/Mod1/, "Alt", key)
+
+    # === Collapse groups ===
+
+    # XF86 media keys
+    if (key ~ /^XF86Audio/) {
+        if (!saw_audio) {
+            saw_audio = 1
+            entries[ec++] = "Volume Keys  →  Volume Up / Down / Mute"
+        }
+        next
+    }
+    if (key ~ /^XF86MonBrightness/) {
+        if (!saw_brightness) {
+            saw_brightness = 1
+            entries[ec++] = "Brightness Keys  →  Brightness Up / Down"
+        }
+        next
+    }
+
+    # Workspace switch/move
+    if (action ~ /^workspace number [0-9]+$/) {
+        if (!saw_ws_switch) {
+            saw_ws_switch = 1
+            entries[ec++] = "Mod+1-0  →  Switch to Workspace 1-10"
+        }
+        next
+    }
+    if (action ~ /^move container to workspace number [0-9]+$/) {
+        if (!saw_ws_move) {
+            saw_ws_move = 1
+            entries[ec++] = "Mod+Shift+1-0  →  Move to Workspace 1-10"
+        }
+        next
+    }
+
+    # Skip arrow-key duplicates of vim bindings
+    if (key ~ /\+(Left|Right|Up|Down)$/) {
+        if (action ~ /^focus (left|right|up|down)$/) next
+        if (action ~ /^move (left|right|up|down)$/) next
+        if (in_mode == "resize" && action ~ /^resize /) next
+    }
+
+    # Skip resize mode vim duplicates (collapse to one line)
+    if (in_mode == "resize") {
+        if (!saw_resize) {
+            saw_resize = 1
+            entries[ec++] = "[resize] H/J/K/L  →  Resize Width / Height"
+            entries[ec++] = "[resize] Esc  →  Exit Resize"
+        }
+        next
+    }
+
+    # Skip autostart execs
+    if (action ~ /^exec /) {
+        cmd = action
+        sub(/^exec /, "", cmd)
+        if (cmd ~ /nm-applet|polkit|mako|pkill|waybar|gsettings/) next
+    }
+
+    # Skip mode "resize" entry (handled above)
+    if (action ~ /^mode "resize"/) next
+
+    # === Generate description from action ===
+    desc = action
+
+    if (action ~ /^exec /) {
+        cmd = action
+        sub(/^exec /, "", cmd)
+        for (v in vars) { gsub("\\$" v, vars[v], cmd) }
+
+        if (cmd ~ /^foot$/ || cmd == vars["term"]) desc = "Terminal"
+        else if (cmd ~ /wofi/) desc = "App Launcher"
+        else if (cmd ~ /grim -g/) desc = "Area Screenshot → Clipboard"
+        else if (cmd ~ /^grim$/) desc = "Full Screenshot"
+        else if (cmd ~ /sway-help/) desc = "Keybinding Help"
+        else if (cmd ~ /swaynag/) desc = "Exit Sway"
+        else if (cmd ~ /powermenu/) desc = "Power Menu"
+        else desc = cmd
+    }
+    else if (action == "kill") desc = "Kill Window"
+    else if (action == "fullscreen") desc = "Fullscreen"
+    else if (action == "splith") desc = "Split Horizontal"
+    else if (action == "splitv") desc = "Split Vertical"
+    else if (action == "layout stacking") desc = "Stacking Layout"
+    else if (action == "layout tabbed") desc = "Tabbed Layout"
+    else if (action == "layout toggle split") desc = "Toggle Split Layout"
+    else if (action == "floating toggle") desc = "Toggle Floating"
+    else if (action == "focus mode_toggle") desc = "Focus Tiling ↔ Floating"
+    else if (action == "focus parent") desc = "Focus Parent"
+    else if (action == "focus left") desc = "Focus Left"
+    else if (action == "focus right") desc = "Focus Right"
+    else if (action == "focus up") desc = "Focus Up"
+    else if (action == "focus down") desc = "Focus Down"
+    else if (action == "move left") desc = "Move Window Left"
+    else if (action == "move right") desc = "Move Window Right"
+    else if (action == "move up") desc = "Move Window Up"
+    else if (action == "move down") desc = "Move Window Down"
+    else if (action == "move scratchpad") desc = "Send to Scratchpad"
+    else if (action == "scratchpad show") desc = "Show Scratchpad"
+    else if (action == "reload") desc = "Reload Config"
+
+    entries[ec++] = key "  →  " desc
+    next
+}
+
+END {
+    for (i = 0; i < ec; i++) print entries[i]
+}
+' "$CONFIG" | wofi --show dmenu \
+    --prompt "Keys (type to filter)" \
+    --width 440 \
+    --height 520 \
+    --cache-file /dev/null \
+    --insensitive \
+    --style "$HOME/.config/wofi/style-help.css"

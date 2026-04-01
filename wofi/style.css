@@ -1,0 +1,41 @@
+window {
+  background-color: #303446;
+  color: #c6d0f5;
+  border: 2px solid #8caaee;
+  border-radius: 8px;
+}
+
+#input {
+  background-color: #292c3c;
+  color: #c6d0f5;
+  border: none;
+  border-bottom: 2px solid #414559;
+  padding: 8px;
+  margin: 4px;
+}
+
+#inner-box {
+  background-color: #303446;
+}
+
+#outer-box {
+  padding: 4px;
+}
+
+#entry {
+  padding: 6px;
+  border-radius: 4px;
+}
+
+#entry:selected {
+  background-color: #414559;
+  color: #8caaee;
+}
+
+#text {
+  color: #c6d0f5;
+}
+
+#text:selected {
+  color: #8caaee;
+}

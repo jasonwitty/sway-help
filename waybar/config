@@ -1,0 +1,46 @@
+{
+  "layer": "top",
+  "position": "top",
+
+  "modules-left": ["sway/workspaces"],
+  "modules-center": ["clock"],
+  "modules-right": ["custom/help", "pulseaudio", "network", "backlight", "battery", "custom/power", "tray"],
+    "pulseaudio": {
+    "format": "{icon}  {volume}%",
+    "format-muted": "󰝟  muted",
+    "format-icons": {
+      "default": ["", "", ""]
+    },
+    "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle"
+  },
+    "network": {
+    "format-wifi": "  {essid}",
+    "format-ethernet": "󰈀  {ipaddr}",
+    "format-disconnected": "⚠  offline",
+    "tooltip": true,
+    "on-click": "foot -e nmtui"
+  },
+
+  "battery": {
+    "format": "{icon}  {capacity}%",
+    "format-icons": ["", "", "", "", ""]
+  },
+
+  "clock": {
+    "format": "{:%a %b %d  %H:%M}"
+  },
+  "backlight": {
+    "format": "  {percent}%",
+    "tooltip": false
+  },
+  "custom/help": {
+    "format": "  ",
+    "tooltip": false,
+    "on-click": "~/.local/bin/sway-help"
+  },
+  "custom/power": {
+    "format": "  ⏻  ",
+    "tooltip": false,
+    "on-click": "~/.local/bin/powermenu"
+  }
+}
