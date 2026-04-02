@@ -2,6 +2,8 @@
 
 Sway window manager configuration with Catppuccin Frappe theme, a dynamic keybinding help overlay, and Claude Code integration.
 
+![screenshot](screenshot.png)
+
 ## What's included
 
 | Directory | Description |
