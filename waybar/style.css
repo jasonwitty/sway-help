@@ -8,6 +8,10 @@ window#waybar {
   color: #c6d0f5;
 }
 
+#workspaces {
+  margin-left: 8px;
+}
+
 #workspaces button {
   padding: 0 6px;
   color: #c6d0f5;
@@ -25,6 +29,21 @@ window#waybar {
   color: #303446;
 }
 
+#cpu,
+#pulseaudio,
+#network,
+#backlight,
+#custom-argon-battery,
+#custom-claude,
+#custom-help,
+#custom-power {
+  padding: 0 8px;
+}
+
+#cpu {
+  color: #85c1dc;
+}
+
 #pulseaudio {
   color: #ca9ee6;
 }
@@ -39,6 +58,18 @@ window#waybar {
 
 #backlight {
   color: #e5c890;
+}
+
+#custom-argon-battery {
+  color: #a6d189;
+}
+
+#custom-argon-battery.warning {
+  color: #ef9f76;
+}
+
+#custom-argon-battery.critical {
+  color: #e78284;
 }
 
 #battery {
@@ -67,6 +98,7 @@ window#waybar {
 
 #custom-power {
   color: #e78284;
+  padding-right: 12px;
 }
 
 #tray {

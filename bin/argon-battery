@@ -1,0 +1,27 @@
+#!/bin/bash
+output=$(sudo /usr/bin/python3 /etc/argon/argononeupd.py GETBATTERY 2>/dev/null)
+percent=$(echo "$output" | grep -oP '\d+')
+
+if [ -z "$percent" ]; then
+    echo '{"text": "󰁹 ?%", "tooltip": "Battery status unavailable", "class": "unknown"}'
+    exit 0
+fi
+
+if [ "$percent" -ge 80 ]; then
+    icon="󰁹"
+    class="good"
+elif [ "$percent" -ge 60 ]; then
+    icon="󰁿"
+    class="good"
+elif [ "$percent" -ge 40 ]; then
+    icon="󰁼"
+    class="moderate"
+elif [ "$percent" -ge 20 ]; then
+    icon="󰁺"
+    class="warning"
+else
+    icon="󰂃"
+    class="critical"
+fi
+
+echo "{\"text\": \"$icon $percent%\", \"tooltip\": \"Argon Battery: $percent%\", \"class\": \"$class\"}"

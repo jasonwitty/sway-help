@@ -43,6 +43,10 @@ input type:touchpad {
     dwt enabled
 }
 
+### Wob (overlay bar for brightness/volume)
+set $WOBSOCK $XDG_RUNTIME_DIR/wob.sock
+exec_always ~/.local/bin/start-wob
+
 ### Colors (Catppuccin Frappe)
 # class                 border  bg      text    indicator child_border
 client.focused          #8caaee #8caaee #303446 #babbf1   #8caaee
@@ -67,11 +71,10 @@ client.urgent           #e78284 #e78284 #303446 #e78284   #e78284
     # Autostart
     exec nm-applet --indicator
     exec /usr/lib/aarch64-linux-gnu/ukui-polkit/polkit-ukui-authentication-agent-1
-    exec mako
+    exec_always pkill -x mako; sleep 0.3; mako
 
     #waybar
-    exec_always pkill waybar
-    exec_always waybar
+    exec_always pkill -x waybar; sleep 0.5; waybar
 
     # Kill focused window
     bindsym $mod+q kill
@@ -206,14 +209,14 @@ bindsym $mod+r mode "resize"
 #
 # Utilities:
 #
-    # Special keys to adjust volume via PulseAudio
-    bindsym --locked XF86AudioMute exec pactl set-sink-mute \@DEFAULT_SINK@ toggle
-    bindsym --locked XF86AudioLowerVolume exec pactl set-sink-volume \@DEFAULT_SINK@ -5%
-    bindsym --locked XF86AudioRaiseVolume exec pactl set-sink-volume \@DEFAULT_SINK@ +5%
-    bindsym --locked XF86AudioMicMute exec pactl set-source-mute \@DEFAULT_SOURCE@ toggle
-    # Special keys to adjust brightness via brightnessctl
-    bindsym --locked XF86MonBrightnessDown exec brightnessctl set 5%-
-    bindsym --locked XF86MonBrightnessUp exec brightnessctl set 5%+
+    # Special keys to adjust volume via WirePlumber
+    bindsym --locked XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && (wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q MUTED && echo 0 > $WOBSOCK || wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f\n", $2 * 100}' > $WOBSOCK)
+    bindsym --locked XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- && wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f\n", $2 * 100}' > $WOBSOCK
+    bindsym --locked XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+ && wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f\n", $2 * 100}' > $WOBSOCK
+    bindsym --locked XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+    # Special keys to adjust brightness via DDC
+    bindsym --locked XF86MonBrightnessDown exec ~/.local/bin/brightness down
+    bindsym --locked XF86MonBrightnessUp exec ~/.local/bin/brightness up
     # Screenshots
     bindsym Print exec grim
     bindsym $mod+Print exec grim -g "$(slurp)" - | wl-copy

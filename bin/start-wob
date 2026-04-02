@@ -1,0 +1,7 @@
+#!/bin/bash
+pkill -x wob 2>/dev/null
+pkill -f "tail -f.*wob.sock" 2>/dev/null
+sleep 0.3
+rm -f /run/user/1000/wob.sock
+mkfifo /run/user/1000/wob.sock
+tail -f /run/user/1000/wob.sock | wob

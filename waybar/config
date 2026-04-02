@@ -1,51 +1,81 @@
 {
   "layer": "top",
   "position": "top",
-
-  "modules-left": ["sway/workspaces"],
-  "modules-center": ["clock"],
-  "modules-right": ["custom/claude", "custom/help", "pulseaudio", "network", "backlight", "battery", "custom/power", "tray"],
-    "pulseaudio": {
-    "format": "{icon}  {volume}%",
-    "format-muted": "󰝟  muted",
-    "format-icons": {
-      "default": ["", "", ""]
-    },
-    "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle"
+  "modules-left": [
+    "sway/workspaces"
+  ],
+  "modules-center": [
+    "clock"
+  ],
+  "modules-right": [
+    "custom/claude",
+    "custom/help",
+    "cpu",
+    "pulseaudio",
+    "backlight",
+    "custom/argon-battery",
+    "tray",
+    "custom/power"
+  ],
+  "cpu": {
+    "format": "󰍛 {usage}%",
+    "interval": 5,
+    "tooltip": true,
+    "on-click": "foot -e /home/jason/.cargo/bin/socktop --demo"
   },
-    "network": {
-    "format-wifi": "  {essid}",
-    "format-ethernet": "󰈀  {ipaddr}",
-    "format-disconnected": "⚠  offline",
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰝟 muted",
+    "format-icons": {
+      "default": [
+        "󰕿",
+        "󰖀",
+        "󰕾"
+      ]
+    },
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+  },
+  "network": {
+    "format-wifi": "󰤨 {essid}",
+    "format-ethernet": "󰈀 {ipaddr}",
+    "format-disconnected": "󰤭 offline",
     "tooltip": true,
     "on-click": "foot -e nmtui"
   },
-
-  "battery": {
-    "format": "{icon}  {capacity}%",
-    "format-icons": ["", "", "", "", ""]
-  },
-
   "clock": {
-    "format": "{:%a %b %d  %H:%M}"
+    "format": "{:%a %b %d  %H:%M}",
+    "tooltip-format": "<tt>{calendar}</tt>",
+    "calendar": {
+      "mode": "month",
+      "format": {
+        "today": "<b><span background=\"#8caaee\" color=\"#303446\">{}</span></b>"
+      }
+    }
   },
   "backlight": {
-    "format": "  {percent}%",
+    "format": "󰃠 {percent}%",
     "tooltip": false
   },
   "custom/claude": {
     "format": "󰗚 ",
     "tooltip": false,
-    "on-click": "foot -e claude",
+    "on-click": "foot -e ~/.local/bin/claude",
     "on-click-right": "~/.local/bin/claude-prompt"
   },
   "custom/help": {
-    "format": "  ",
+    "format": "󰋖 ",
     "tooltip": false,
     "on-click": "~/.local/bin/sway-help"
   },
+  "custom/argon-battery": {
+    "exec": "~/.local/bin/argon-battery",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py"
+  },
   "custom/power": {
-    "format": "  ⏻  ",
+    "format": "⏻",
     "tooltip": false,
     "on-click": "~/.local/bin/powermenu"
   }
