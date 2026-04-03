@@ -64,7 +64,7 @@ This section covers setting up a fresh Argon ONE UP CM5 laptop from a clean Rasp
 
 ### 1. Flash and boot Raspberry Pi OS
 
-Flash **Raspberry Pi OS** (Debian Trixie-based, 64-bit) to your NVMe or SD card using Raspberry Pi Imager. Boot and log in.
+Flash **Raspberry Pi OS Lite** (minimal, no desktop, Debian Trixie-based, 64-bit) to your NVMe or SD card using [Raspberry Pi Imager](https://www.raspberrypi.com/software/). The Lite image gives you a clean base without a pre-installed desktop environment. Boot and log in.
 
 ### 2. Update the system
 
@@ -76,7 +76,7 @@ sudo reboot
 
 ### 3. Fix NVMe power management (critical)
 
-The Argon ONE UP's NVMe drive can become extremely sluggish or cause I/O timeouts without these kernel parameters. This was the single biggest stability issue during initial setup — the system was nearly unusable without this fix.
+The Argon ONE UP's NVMe drive can become extremely sluggish or cause I/O timeouts without these kernel parameters. **This was the single biggest stability issue during initial setup — the system was nearly unusable without this fix.**
 
 Edit the kernel command line (**keep everything on one line**):
 
@@ -101,7 +101,7 @@ dmesg -T | grep -i nvme
 
 ### 4. Install the Argon config tool
 
-This provides battery monitoring, fan control, and power button configuration:
+This provides battery monitoring, fan control, and power button configuration for the Argon ONE UP case:
 
 ```bash
 curl https://download.argon40.com/argononeup.sh | bash
@@ -141,7 +141,18 @@ groups  # should include seat, video, audio, input, render
 systemctl status seatd  # should be active
 ```
 
-### 7. Install dependencies
+### 7. Install a login manager
+
+Install GDM (GNOME Display Manager) so you can select Sway as your session at the login screen:
+
+```bash
+sudo apt install -y gdm3
+sudo systemctl enable gdm
+```
+
+After installing Sway (next step), you'll be able to choose **Sway** from the session dropdown on the GDM login screen.
+
+### 8. Install dependencies
 
 Core packages:
 
@@ -152,7 +163,8 @@ sudo apt install -y \
   grim slurp wl-clipboard \
   ddcutil pipewire wireplumber \
   network-manager network-manager-gnome \
-  seatd policykit-1 \
+  ukui-polkit papirus-icon-theme \
+  fish \
   fonts-jetbrains-mono
 ```
 
@@ -163,9 +175,25 @@ sudo apt install -y \
   firefox-esr thunar mpv imv file-roller
 ```
 
-### 8. Install Rust toolchain and wl-gammarelay-rs
+### 9. Install socktop
 
-The hybrid brightness control needs `wl-gammarelay-rs` for instant gamma adjustment:
+[socktop](https://socktop.io) is a TUI-first remote system monitor. It's used by the waybar CPU module (click to open). Install from the apt repo:
+
+```bash
+curl -fsSL https://jasonwitty.github.io/socktop/KEY.gpg | \
+    sudo gpg --dearmor -o /usr/share/keyrings/socktop-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/socktop-archive-keyring.gpg] https://jasonwitty.github.io/socktop stable main" | \
+    sudo tee /etc/apt/sources.list.d/socktop.list
+
+sudo apt update
+sudo apt install -y socktop socktop-agent
+sudo systemctl enable --now socktop-agent
+```
+
+### 10. Install Rust toolchain and wl-gammarelay-rs
+
+The hybrid brightness control needs [wl-gammarelay-rs](https://github.com/MaxVerevkin/wl-gammarelay-rs) for instant gamma adjustment:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -175,7 +203,7 @@ cargo install wl-gammarelay-rs
 
 Note: compiling on the CM5 takes several minutes.
 
-### 9. Copy this config
+### 11. Copy this config
 
 ```bash
 # Clone the repo
@@ -189,9 +217,9 @@ cp bin/* ~/.local/bin/
 chmod +x ~/.local/bin/*
 ```
 
-### 10. Test Sway
+### 12. Log in to Sway
 
-Log out of any existing desktop session and select **Sway** from the session menu in GDM (the login screen). If everything is set up correctly, you should see the Catppuccin-themed desktop with waybar at the top.
+Reboot, and at the GDM login screen select **Sway** from the session menu (gear icon). If everything is set up correctly, you should see the Catppuccin-themed desktop with waybar at the top.
 
 If Sway fails to start, check:
 
@@ -201,7 +229,7 @@ systemctl status seatd
 groups  # make sure seat group is present
 ```
 
-### 11. Install Claude Code (optional)
+### 13. Install Claude Code (optional)
 
 For the Mod+C integration:
 
