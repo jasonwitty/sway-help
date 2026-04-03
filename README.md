@@ -1,6 +1,6 @@
 # sway-argon-one-up
 
-Sway window manager configuration for the [Argon ONE UP CM5 Laptop](https://argon40.com/products/argon-one-up-cm5-laptop-core-system), a 14-inch laptop powered by the Raspberry Pi Compute Module 5. Includes Catppuccin Frappe theming, a dynamic keybinding help overlay, DDC brightness control over HDMI, and Claude Code integration.
+Sway window manager configuration for the [Argon ONE UP CM5 Laptop](https://argon40.com/products/argon-one-up-cm5-laptop-core-system), a 14-inch laptop powered by the Raspberry Pi Compute Module 5. Includes Catppuccin Frappe theming, a dynamic keybinding help overlay, hybrid brightness control, and Claude Code integration.
 
 ![screenshot](screenshot.png)
 
@@ -56,35 +56,200 @@ Launch Claude Code directly from Sway:
 
 `claude-prompt` opens a minimal wofi input, takes your question, and launches Claude in foot with that prompt. The terminal stays open after Claude responds so you can continue the conversation.
 
-## Prerequisites
+---
 
-### Argon config tool
+## Initial setup from scratch
 
-Install the Argon ONE UP configuration tool for battery monitoring and fan control:
+This section covers setting up a fresh Argon ONE UP CM5 laptop from a clean Raspberry Pi OS install to a working Sway desktop with this config.
+
+### 1. Flash and boot Raspberry Pi OS
+
+Flash **Raspberry Pi OS** (Debian Trixie-based, 64-bit) to your NVMe or SD card using Raspberry Pi Imager. Boot and log in.
+
+### 2. Update the system
+
+```bash
+sudo apt update
+sudo apt full-upgrade -y
+sudo reboot
+```
+
+### 3. Fix NVMe power management (critical)
+
+The Argon ONE UP's NVMe drive can become extremely sluggish or cause I/O timeouts without these kernel parameters. This was the single biggest stability issue during initial setup — the system was nearly unusable without this fix.
+
+Edit the kernel command line (**keep everything on one line**):
+
+```bash
+sudo nano /boot/firmware/cmdline.txt
+```
+
+Append to the existing line:
+
+```
+nvme_core.default_ps_max_latency_us=0 pcie_aspm=off
+```
+
+This disables NVMe power state transitions and PCIe Active State Power Management, both of which cause latency spikes on the CM5's PCIe bus.
+
+Reboot, then verify no NVMe errors:
+
+```bash
+sudo reboot
+dmesg -T | grep -i nvme
+```
+
+### 4. Install the Argon config tool
+
+This provides battery monitoring, fan control, and power button configuration:
 
 ```bash
 curl https://download.argon40.com/argononeup.sh | bash
 ```
 
-### Dependencies
+### 5. Set Wi-Fi regulatory domain
+
+Incorrect settings can cause poor Wi-Fi performance and channel restrictions:
 
 ```bash
-sudo apt install sway waybar wofi foot mako-notifier swaylock swayidle \
-  grim slurp wl-clipboard wob ddcutil pipewire wireplumber \
-  network-manager-gnome fonts-jetbrains-mono
+sudo raspi-config
+```
 
-# Hybrid brightness control (instant gamma + DDC backlight)
+Navigate to **Localisation Options > WLAN Country** and set your country code (e.g. US).
+
+Verify with:
+
+```bash
+iw reg get
+```
+
+### 6. Enable seat management
+
+Sway needs proper seat access to manage the display and input devices:
+
+```bash
+sudo apt install -y seatd
+sudo systemctl enable --now seatd
+sudo usermod -aG seat,video,audio,input,render "$USER"
+sudo reboot
+```
+
+Verify after reboot:
+
+```bash
+groups  # should include seat, video, audio, input, render
+systemctl status seatd  # should be active
+```
+
+### 7. Install dependencies
+
+Core packages:
+
+```bash
+sudo apt install -y \
+  sway swaybg swayidle swaylock xwayland \
+  waybar wofi foot wob mako-notifier \
+  grim slurp wl-clipboard \
+  ddcutil pipewire wireplumber \
+  network-manager network-manager-gnome \
+  seatd policykit-1 \
+  fonts-jetbrains-mono
+```
+
+Optional but recommended:
+
+```bash
+sudo apt install -y \
+  firefox-esr thunar mpv imv file-roller
+```
+
+### 8. Install Rust toolchain and wl-gammarelay-rs
+
+The hybrid brightness control needs `wl-gammarelay-rs` for instant gamma adjustment:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
 cargo install wl-gammarelay-rs
 ```
 
-[Claude Code](https://claude.ai/claude-code) must be installed separately for the Mod+C integration.
+Note: compiling on the CM5 takes several minutes.
 
-## Install
+### 9. Copy this config
 
 ```bash
+# Clone the repo
+git clone https://github.com/jasonwitty/sway-argon-one-up.git
+cd sway-argon-one-up
+
 # Copy configs
 cp -r sway waybar wob wofi foot mako swaylock gtk-3.0 ~/.config/
+mkdir -p ~/.local/bin
 cp bin/* ~/.local/bin/
-chmod +x ~/.local/bin/sway-help ~/.local/bin/claude-prompt \
-  ~/.local/bin/brightness ~/.local/bin/start-wob ~/.local/bin/argon-battery
+chmod +x ~/.local/bin/*
 ```
+
+### 10. Test Sway
+
+Log out of any existing desktop session and select **Sway** from the session menu in GDM (the login screen). If everything is set up correctly, you should see the Catppuccin-themed desktop with waybar at the top.
+
+If Sway fails to start, check:
+
+```bash
+journalctl -b --no-pager | tail -200
+systemctl status seatd
+groups  # make sure seat group is present
+```
+
+### 11. Install Claude Code (optional)
+
+For the Mod+C integration:
+
+```bash
+# See https://claude.ai/claude-code for installation
+claude  # run once to authenticate
+```
+
+---
+
+## Troubleshooting
+
+### System is extremely slow / NVMe timeouts
+
+The most common issue. Check that the kernel parameters are set:
+
+```bash
+cat /proc/cmdline | grep nvme_core
+```
+
+If `nvme_core.default_ps_max_latency_us=0` and `pcie_aspm=off` are not present, see step 3 above.
+
+### Brightness keys don't work
+
+Check that `ddcutil` can see the display and `wl-gammarelay-rs` is running:
+
+```bash
+ddcutil detect
+ddcutil getvcp 10
+pgrep wl-gammarelay
+```
+
+### No sound / volume keys don't work
+
+This config uses PipeWire with WirePlumber (`wpctl`), not PulseAudio (`pactl`):
+
+```bash
+wpctl status
+wpctl get-volume @DEFAULT_AUDIO_SINK@
+```
+
+### Waybar or wob missing after sway reload
+
+These use `exec_always` and should survive reloads. If they don't appear, check the processes:
+
+```bash
+pgrep waybar
+pgrep wob
+```
+
+And restart manually if needed: `swaymsg reload`
