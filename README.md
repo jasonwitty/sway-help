@@ -375,7 +375,7 @@ sudo apt install -y \
   ddcutil i2c-tools pipewire wireplumber \
   network-manager network-manager-gnome \
   ukui-polkit papirus-icon-theme \
-  fish
+  fish fonts-firacode zoxide fzf ugrep
 ```
 
 Install JetBrainsMono Nerd Font (required for waybar icons):
@@ -387,10 +387,19 @@ unzip -o /tmp/JetBrainsMono.zip -d ~/.local/share/fonts/
 fc-cache -fv
 ```
 
-Install [Starship](https://starship.rs/) prompt for fish:
+Install Rust toolchain and CLI tools used by the fish config:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+cargo install --locked bat eza pfetch-rs
+```
+
+Install [Starship](https://starship.rs/) prompt and [Atuin](https://atuin.sh/) shell history:
 
 ```bash
 curl -sS https://starship.rs/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh
 ```
 
 Optional but recommended:
