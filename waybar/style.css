@@ -73,6 +73,10 @@ window#waybar {
   color: #e78284;
 }
 
+#custom-argon-battery.charging {
+  color: #e5c890;
+}
+
 #battery {
   color: #a6d189;
 }

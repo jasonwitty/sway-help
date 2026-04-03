@@ -1,27 +1,35 @@
 #!/bin/bash
 output=$(sudo /usr/bin/python3 /etc/argon/argononeupd.py GETBATTERY 2>/dev/null)
 percent=$(echo "$output" | grep -oP '\d+')
+charging=$(echo "$output" | grep -qi 'charging' && echo 1 || echo 0)
 
 if [ -z "$percent" ]; then
     echo '{"text": "󰁹 ?%", "tooltip": "Battery status unavailable", "class": "unknown"}'
     exit 0
 fi
 
-if [ "$percent" -ge 80 ]; then
-    icon="󰁹"
-    class="good"
-elif [ "$percent" -ge 60 ]; then
-    icon="󰁿"
-    class="good"
-elif [ "$percent" -ge 40 ]; then
-    icon="󰁼"
-    class="moderate"
-elif [ "$percent" -ge 20 ]; then
-    icon="󰁺"
-    class="warning"
+if [ "$charging" = "1" ]; then
+    if [ "$percent" -ge 80 ]; then icon="󰂅"
+    elif [ "$percent" -ge 60 ]; then icon="󰂄"
+    elif [ "$percent" -ge 40 ]; then icon="󰂈"
+    elif [ "$percent" -ge 20 ]; then icon="󰂆"
+    else icon="󰢟"
+    fi
+    class="charging"
+    status="Charging"
 else
-    icon="󰂃"
-    class="critical"
+    if [ "$percent" -ge 80 ]; then
+        icon="󰁹"; class="good"
+    elif [ "$percent" -ge 60 ]; then
+        icon="󰁿"; class="good"
+    elif [ "$percent" -ge 40 ]; then
+        icon="󰁼"; class="moderate"
+    elif [ "$percent" -ge 20 ]; then
+        icon="󰁺"; class="warning"
+    else
+        icon="󰂃"; class="critical"
+    fi
+    status="Discharging"
 fi
 
-echo "{\"text\": \"$icon $percent%\", \"tooltip\": \"Argon Battery: $percent%\", \"class\": \"$class\"}"
+echo "{\"text\": \"$icon $percent%\", \"tooltip\": \"Argon Battery: $status $percent%\", \"class\": \"$class\"}"
