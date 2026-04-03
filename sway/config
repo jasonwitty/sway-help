@@ -43,6 +43,9 @@ input type:touchpad {
     dwt enabled
 }
 
+### Gamma relay for instant brightness control
+exec_always pkill -x wl-gammarelay-rs; sleep 0.2; wl-gammarelay-rs
+
 ### Wob (overlay bar for brightness/volume)
 set $WOBSOCK $XDG_RUNTIME_DIR/wob.sock
 exec_always ~/.local/bin/start-wob
@@ -217,6 +220,8 @@ bindsym $mod+r mode "resize"
     # Special keys to adjust brightness via DDC
     bindsym --locked XF86MonBrightnessDown exec ~/.local/bin/brightness down
     bindsym --locked XF86MonBrightnessUp exec ~/.local/bin/brightness up
+    # Argon battery dashboard
+    bindsym Pause exec foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py
     # Screenshots
     bindsym Print exec grim
     bindsym $mod+Print exec grim -g "$(slurp)" - | wl-copy

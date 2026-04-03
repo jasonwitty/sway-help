@@ -1,10 +1,25 @@
 #!/bin/bash
-# DDC brightness control with wob indicator
+# Hybrid brightness: instant gamma via wl-gammarelay-rs + DDC panel backlight
+#
+# Every key press instantly adjusts gamma for immediate visual feedback.
+# A debounced ddcutil call sets the real panel backlight, then resets gamma to 1.0.
+# Result: instant response on every press, real backlight catches up ~1s later.
+
 CACHE_FILE="/tmp/.brightness_level"
+PANEL_FILE="/tmp/.brightness_panel"
 WOBSOCK="/run/user/1000/wob.sock"
 STEP=5
+MIN=5
+MAX=100
 
-# Get current brightness from cache, or query DDC
+DBUS_DEST="rs.wl-gammarelay"
+DBUS_PATH="/"
+DBUS_IFACE="rs.wl.gammarelay"
+
+# Kill any pending debounced apply
+pkill -f "brightness-apply" 2>/dev/null
+
+# Current target from cache
 if [[ -f "$CACHE_FILE" ]]; then
     current=$(cat "$CACHE_FILE")
 else
@@ -12,17 +27,42 @@ else
     [[ -z "$current" ]] && current=50
 fi
 
+# Actual panel brightness (what ddcutil last set successfully)
+if [[ -f "$PANEL_FILE" ]]; then
+    panel=$(cat "$PANEL_FILE")
+else
+    panel=$current
+    echo "$panel" > "$PANEL_FILE"
+fi
+
 case "$1" in
-    up)   new=$(( current + STEP > 100 ? 100 : current + STEP )) ;;
-    down) new=$(( current - STEP < 0 ? 0 : current - STEP )) ;;
+    up)   new=$(( current + STEP > MAX ? MAX : current + STEP )) ;;
+    down) new=$(( current - STEP < MIN ? MIN : current - STEP )) ;;
     *)    echo "Usage: brightness up|down"; exit 1 ;;
 esac
 
-# Cache and show indicator immediately (never blocks)
+# Instant gamma adjustment: compensate for panel being at old level
+# gamma = target / panel, so effective brightness = panel * (target/panel) = target
+if [[ "$panel" -gt 0 ]]; then
+    gamma=$(awk "BEGIN {v = $new / $panel; if (v > 1.0) v = 1.0; if (v < 0.05) v = 0.05; printf \"%.2f\", v}")
+else
+    gamma="1.00"
+fi
+busctl --user --expect-reply=false set-property $DBUS_DEST $DBUS_PATH $DBUS_IFACE Brightness d "$gamma"
+
+# Cache target and show indicator
 echo "$new" > "$CACHE_FILE"
 echo "$new" > "$WOBSOCK"
 
-# Kill any previous ddcutil and apply the latest value
-pkill -f "ddcutil setvcp 10" 2>/dev/null
-ddcutil setvcp 10 "$new" 2>/dev/null &
+# Debounced panel apply: wait briefly for rapid presses to settle
+(
+    exec -a brightness-apply bash -c "
+        sleep 0.4
+        target=\$(cat $CACHE_FILE)
+        pkill -f 'ddcutil setvcp 10' 2>/dev/null
+        ddcutil setvcp 10 \"\$target\" --noverify --sleep-multiplier 0.1 2>/dev/null
+        echo \"\$target\" > $PANEL_FILE
+        busctl --user --expect-reply=false set-property $DBUS_DEST $DBUS_PATH $DBUS_IFACE Brightness d 1.0
+    "
+) &
 disown

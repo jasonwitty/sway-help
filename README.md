@@ -6,7 +6,7 @@ Sway window manager configuration for the [Argon ONE UP CM5 Laptop](https://argo
 
 ## Hardware
 
-This config is built for the [Argon ONE UP CM5 Laptop](https://argon40.com/products/argon-one-up-cm5-laptop-core-system) which uses a Raspberry Pi Compute Module 5. The display is connected via HDMI internally, so standard backlight controls don't apply — brightness is handled through DDC (`ddcutil`). The Argon case also has its own battery, monitored via a custom script.
+This config is built for the [Argon ONE UP CM5 Laptop](https://argon40.com/products/argon-one-up-cm5-laptop-core-system) which uses a Raspberry Pi Compute Module 5. The display is connected via HDMI internally, so standard backlight controls don't apply — brightness uses a hybrid approach: [wl-gammarelay-rs](https://github.com/MaxVerevkin/wl-gammarelay-rs) provides instant gamma adjustment on every key press, while `ddcutil` sets the real panel backlight in the background. The Argon case also has its own battery, monitored via a custom script.
 
 ## What's included
 
@@ -31,8 +31,9 @@ This config is built for the [Argon ONE UP CM5 Laptop](https://argon40.com/produ
 | **Fn+F6** | Mute/unmute |
 | **Fn+F7** | Volume down |
 | **Fn+F8** | Volume up |
+| **Battery key** | Open Argon battery dashboard |
 
-All media keys show a visual indicator via wob (Wayland Overlay Bar).
+All media keys show a visual indicator via wob (Wayland Overlay Bar). Brightness adjusts instantly via gamma, with the panel backlight catching up ~1s later via DDC.
 
 ## sway-help
 
@@ -71,6 +72,9 @@ curl https://download.argon40.com/argononeup.sh | bash
 sudo apt install sway waybar wofi foot mako-notifier swaylock swayidle \
   grim slurp wl-clipboard wob ddcutil pipewire wireplumber \
   network-manager-gnome fonts-jetbrains-mono
+
+# Hybrid brightness control (instant gamma + DDC backlight)
+cargo install wl-gammarelay-rs
 ```
 
 [Claude Code](https://claude.ai/claude-code) must be installed separately for the Mod+C integration.
