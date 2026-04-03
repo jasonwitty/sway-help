@@ -20,7 +20,7 @@ This config is built for the [Argon ONE UP CM5 Laptop](https://argon40.com/produ
 | `mako/` | Notification daemon themed to match |
 | `swaylock/` | Lock screen with Frappe colored ring indicator |
 | `gtk-3.0/` | GTK dark theme settings |
-| `bin/` | `sway-help`, `claude-prompt`, `brightness`, `start-wob`, `argon-battery` scripts |
+| `bin/` | `sway-help`, `claude-prompt`, `brightness`, `start-wob`, `argon-battery`, `lid-suspend` scripts |
 
 ## Media keys
 
@@ -62,27 +62,62 @@ Launch Claude Code directly from Sway:
 
 These sections explain specific features in detail so you can add them to your own setup without cloning the full config.
 
-### Suspend / resume / lid close
+### Lid close power management
 
-Suspend works out of the box on the Argon ONE UP with `systemctl suspend`. The setup has three layers:
+The Raspberry Pi 5 / CM5 does not support system suspend — there is no `/sys/power/state` or `mem_sleep` interface. Attempting `systemctl suspend` will result in a black screen requiring a hard reboot.
 
-**1. Power menu (wofi)** — the power button in waybar opens a wofi menu with Lock, Suspend, Reboot, Shutdown, and Logout options:
+Instead, the lid close script (`bin/lid-suspend`) performs a "soft suspend" by powering down subsystems individually. The Argon ONE UP case detects the lid switch via a GPIO line monitored by its own daemon (`argononeupd.py`), not through the standard ACPI/libinput lid switch — so sway `bindswitch` does not work here.
 
-```bash
-#!/bin/bash
-# ~/.local/bin/powermenu
-choice=$(printf "Lock\nSuspend\nReboot\nShutdown\nLogout" | wofi --dmenu --prompt "Power")
+**What happens on lid close:**
 
-case "$choice" in
-  Lock) swaylock ;;
-  Suspend) systemctl suspend ;;
-  Reboot) systemctl reboot ;;
-  Shutdown) systemctl poweroff ;;
-  Logout) swaymsg exit ;;
-esac
+| Action | Savings | Detail |
+|--------|---------|--------|
+| Lock screen | — | `swaylock -f` |
+| Display off | ~1-2W | `swaymsg "output * power off"` |
+| CPU governor → powersave | ~200-400mW | Scales frequency down |
+| WiFi off | ~150-300mW | `rfkill block wifi` |
+| Bluetooth off | ~100-200mW | `rfkill block bluetooth` |
+| Webcam unbound | ~100-200mW | USB unbind by vendor ID (`11cc:2812`) |
+
+All actions are reversed on lid open. WiFi reconnects automatically. Events are logged to `~/.local/state/lid-events.log`.
+
+**Setup:**
+
+**1. Configure the Argon daemon** — set `lidaction=suspend` in `/etc/argononeupd.conf`:
+
+```
+# /etc/argononeupd.conf
+lidshutdownsecs=0
+lidaction=suspend
 ```
 
-**2. Idle timeout (swayidle)** — locks the screen after 5 minutes, turns off the display after 10, and locks before any suspend:
+The Argon daemon's `argonpowerbutton.py` checks this value and calls `lid-suspend close` / `lid-suspend open` accordingly.
+
+**2. Install the script:**
+
+```bash
+cp bin/lid-suspend ~/.local/bin/
+chmod +x ~/.local/bin/lid-suspend
+```
+
+**3. Add passwordless sudo** for the power management operations:
+
+```bash
+sudo tee /etc/sudoers.d/lid-power > /dev/null <<'EOF'
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill block wifi
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill unblock wifi
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill block bluetooth
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill unblock bluetooth
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/unbind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/bind
+EOF
+sudo visudo -cf /etc/sudoers.d/lid-power
+```
+
+Replace `jason` with your username.
+
+**4. Idle timeout (swayidle)** — separate from the lid, this locks after 5 minutes idle and turns off the display after 10:
 
 ```
 exec swayidle -w \
@@ -91,13 +126,7 @@ exec swayidle -w \
     before-sleep 'swaylock -f'
 ```
 
-**3. Lid close (Argon daemon)** — the Argon config tool handles the lid switch via its own daemon. Configure with:
-
-```bash
-sudo /etc/argon/argononeup-lidconfig.sh
-```
-
-Options are "do nothing" or "shutdown after N minutes". The setting is stored in `/etc/argononeupd.conf` as `lidshutdownsecs`.
+**Important:** Do not configure `logind.conf` to handle the lid switch — there is no standard lid switch device on this hardware, and if logind attempts to suspend it will black-screen the system.
 
 ### Argon battery in waybar
 

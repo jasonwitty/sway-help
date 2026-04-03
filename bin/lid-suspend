@@ -1,0 +1,85 @@
+#!/bin/bash
+# Called by argon daemon on lid close/open
+# Usage: lid-suspend close | lid-suspend open
+export XDG_RUNTIME_DIR=/run/user/1000
+export SWAYSOCK=/run/user/1000/sway-ipc.1000.$(pgrep -x sway).sock
+export WAYLAND_DISPLAY=wayland-1
+
+LOG="$HOME/.local/state/lid-events.log"
+mkdir -p "$(dirname "$LOG")"
+
+# Find webcam USB device path by vendor:product ID
+WEBCAM_ID="11cc:2812"
+find_webcam() {
+    for dev in /sys/bus/usb/devices/*/idVendor; do
+        devdir="$(dirname "$dev")"
+        if [ "$(cat "$devdir/idVendor" 2>/dev/null)" = "11cc" ] &&
+           [ "$(cat "$devdir/idProduct" 2>/dev/null)" = "2812" ]; then
+            basename "$devdir"
+            return
+        fi
+    done
+}
+
+log() { echo "  $1" >> "$LOG"; }
+
+case "$1" in
+    close)
+        echo "=== LID CLOSE $(date '+%Y-%m-%d %H:%M:%S') ===" >> "$LOG"
+
+        swaylock -f &
+        sleep 0.5
+        swaymsg "output * power off"
+        log "display: off"
+
+        echo powersave | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+        log "cpu governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+
+        sudo rfkill block wifi
+        sudo rfkill block bluetooth
+        log "wifi: $(rfkill list wifi | grep -o 'Soft blocked: .*')"
+        log "bluetooth: $(rfkill list bluetooth | grep -o 'Soft blocked: .*')"
+
+        WEBCAM=$(find_webcam)
+        if [ -n "$WEBCAM" ]; then
+            echo "$WEBCAM" | sudo tee /sys/bus/usb/drivers/usb/unbind > /dev/null 2>&1
+            log "webcam ($WEBCAM): unbound"
+        else
+            log "webcam: not found (already unbound or disconnected)"
+        fi
+        ;;
+    open)
+        echo "=== LID OPEN $(date '+%Y-%m-%d %H:%M:%S') ===" >> "$LOG"
+
+        swaymsg "output * power on"
+        log "display: on"
+
+        echo ondemand | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+        log "cpu governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+
+        sudo rfkill unblock wifi
+        sudo rfkill unblock bluetooth
+        log "wifi: $(rfkill list wifi | grep -o 'Soft blocked: .*')"
+        log "bluetooth: $(rfkill list bluetooth | grep -o 'Soft blocked: .*')"
+
+        # Rebind webcam — after unbind the sysfs entry still exists, so we can find it
+        WEBCAM=$(find_webcam)
+        if [ -z "$WEBCAM" ]; then
+            # Fallback: scan for unbound device by ID in sysfs
+            for dev in /sys/bus/usb/devices/*/idVendor; do
+                devdir="$(dirname "$dev")"
+                if [ "$(cat "$devdir/idVendor" 2>/dev/null)" = "11cc" ] &&
+                   [ "$(cat "$devdir/idProduct" 2>/dev/null)" = "2812" ]; then
+                    WEBCAM=$(basename "$devdir")
+                    break
+                fi
+            done
+        fi
+        if [ -n "$WEBCAM" ]; then
+            echo "$WEBCAM" | sudo tee /sys/bus/usb/drivers/usb/bind > /dev/null 2>&1
+            log "webcam ($WEBCAM): bound"
+        else
+            log "webcam: not found"
+        fi
+        ;;
+esac
