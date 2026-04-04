@@ -14,7 +14,7 @@ This config is built for the [Argon ONE UP CM5 Laptop](https://argon40.com/produ
 |-----------|-------------|
 | `sway/` | Sway config with themed window colors, idle lock, touchpad, media keys |
 | `waybar/` | Top bar with workspaces, clock, CPU, volume, backlight, Argon battery, tray, theme/scale/Claude/help/power buttons |
-| `sway-themes/` | 9 theme definitions + templates for all themed apps (sway, waybar, foot, mako, swaylock, wofi, wob) |
+| `sway-themes/` | 9 theme definitions + templates for all themed apps (sway, waybar, foot, mako, swaylock, wofi, wob, Brave, Chromium) |
 | `wallpapers/` | Matching wallpaper for each theme (auto-applied on theme switch) |
 | `wob/` | Wayland Overlay Bar config for brightness/volume indicators |
 | `wofi/` | App launcher and help overlay styles |
@@ -60,9 +60,33 @@ Launch Claude Code directly from Sway:
 
 `claude-prompt` opens a minimal wofi input, takes your question, and launches Claude in foot with that prompt. The terminal stays open after Claude responds so you can continue the conversation.
 
+## Browser integration
+
+| Binding | Action |
+|---------|--------|
+| **Mod+B** | Launch Brave browser |
+
+Brave is launched with performance flags optimized for the Pi's hardware (`--enable-low-end-device-mode`, `--process-per-site`, etc.). Both Brave and Chromium are themed automatically by the theme switcher via managed policy files — the browser title bar and color scheme update live on theme change, no restart needed.
+
+**Prerequisites:** Install [Brave](https://brave.com/linux/) and/or [Chromium](https://www.chromium.org/). Both browsers must be installed for full theme integration. Set up the managed policy directories:
+
+```bash
+sudo mkdir -p /etc/brave/policies/managed
+sudo mkdir -p /etc/chromium/policies/managed
+```
+
+The `switch-theme` script needs passwordless sudo to write the policy files. Add to your sudoers:
+
+```bash
+sudo tee /etc/sudoers.d/browser-theme > /dev/null <<EOF
+$USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/brave/policies/managed/color.json
+$USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/chromium/policies/managed/color.json
+EOF
+```
+
 ## Theme switcher
 
-Switch between 9 themes with a single click or command. Every themed app updates simultaneously — sway window borders, waybar, foot terminals, mako notifications, swaylock, wofi, wob, GTK apps, and the wallpaper.
+Switch between 9 themes with a single click or command. Every themed app updates simultaneously — sway window borders, waybar, foot terminals, mako notifications, swaylock, wofi, wob, GTK apps, Brave, Chromium, and the wallpaper.
 
 **Available themes:**
 
@@ -99,6 +123,7 @@ Switch between 9 themes with a single click or command. Every themed app updates
 - Templates in `sway-themes/templates/` use `@@VARIABLE@@` placeholders
 - `switch-theme` sources a theme, renders all templates, and applies colors at runtime
 - Foot terminals are live-recolored via OSC 4/10/11 escape sequences sent directly to each terminal's pts device — no restart needed
+- Brave and Chromium are themed via managed policy files (`/etc/brave/policies/managed/color.json` and `/etc/chromium/policies/managed/color.json`) — the browser reads these live, no restart needed
 - Wallpapers are applied via `swaybg`, with an optional override that persists across theme switches
 - Waybar is restarted (via `swaymsg exec` to survive the restart), mako is reloaded, wob is restarted
 
@@ -413,7 +438,17 @@ Optional but recommended:
 
 ```bash
 sudo apt install -y \
-  firefox-esr thunar mpv imv file-roller
+  firefox-esr thunar mpv imv file-roller chromium
+```
+
+For Brave browser, follow the [official install guide](https://brave.com/linux/). Both Brave and Chromium are themed automatically by the theme switcher. Set up the policy directories for browser theming:
+
+```bash
+sudo mkdir -p /etc/brave/policies/managed /etc/chromium/policies/managed
+sudo tee /etc/sudoers.d/browser-theme > /dev/null <<EOF
+$USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/brave/policies/managed/color.json
+$USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/chromium/policies/managed/color.json
+EOF
 ```
 
 ### 9. Install socktop

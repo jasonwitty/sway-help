@@ -93,6 +93,9 @@ apply_theme() {
     # Set wallpaper (override takes priority over theme default)
     set_wallpaper "${WALLPAPER:-}"
 
+    # Update browser theme via managed policy (live, no restart needed)
+    set_browser_theme
+
     # Live-update all running foot terminals via OSC escape sequences
     reload_foot_colors
     makoctl reload 2>/dev/null
@@ -139,6 +142,27 @@ reload_foot_colors() {
             printf '%b' "$osc" > "$target" 2>/dev/null
         fi
     done
+}
+
+set_browser_theme() {
+    local color="#${BASE}"
+    local scheme
+    if [ "$COLOR_SCHEME" = "prefer-dark" ]; then
+        scheme="dark"
+    else
+        scheme="light"
+    fi
+    local policy="{\"BrowserThemeColor\": \"$color\", \"BrowserColorScheme\": \"$scheme\"}"
+
+    # Chromium
+    if [ -d /etc/chromium/policies/managed ]; then
+        echo "$policy" | sudo tee /etc/chromium/policies/managed/color.json >/dev/null
+    fi
+
+    # Brave
+    if [ -d /etc/brave/policies/managed ]; then
+        echo "$policy" | sudo tee /etc/brave/policies/managed/color.json >/dev/null
+    fi
 }
 
 set_wallpaper() {

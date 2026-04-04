@@ -143,9 +143,9 @@ include ~/.config/sway/colors
 # Layout stuff:
 #
     # You can "split" the current object of your focus with
-    # $mod+b or $mod+v, for horizontal and vertical splits
+    # $mod+Shift+v or $mod+v, for horizontal and vertical splits
     # respectively.
-    bindsym $mod+b splith
+    bindsym $mod+Shift+v splith
     bindsym $mod+v splitv
 
     # Switch the current container between different layout styles
@@ -224,5 +224,7 @@ bindsym $mod+r mode "resize"
     bindsym $mod+t exec ~/.local/bin/switch-theme --picker
     # Help overlay
     bindsym $mod+Shift+h exec ~/.local/bin/sway-help
+    # Brave browser
+    bindsym $mod+b exec /usr/bin/brave-browser-stable --enable-low-end-device-mode --process-per-site --disable-smooth-scrolling --disable-features=TabHoverCards --disable-backgrounding-occluded-windows --disable-renderer-backgrounding
 
 include /etc/sway/config.d/*
