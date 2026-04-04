@@ -16,15 +16,15 @@ The Argon ONE UP has an internal battery that isn't exposed through `/sys/class/
 | Poll interval | As fast as possible | Configurable (default: 1s via waybar) |
 | Output | Writes to `/dev/shm/upslog.txt` | JSON to stdout |
 | Brightness control | None | Auto-adjusts on AC/battery transitions |
-| CPU governor | None | Auto-switches on AC/battery transitions |
+| CPU governor | None | Auto-switches on AC/battery transitions (via `sudo tee`) |
 
 ## Features
 
 - Battery percentage with appropriate icons per charge level
 - Charging detection with distinct icons
 - Automatic display brightness adjustment via DDC/CI on power state transitions (100% on AC, 40% on battery)
-- Automatic CPU governor switching on power state transitions (ondemand on AC, powersave on battery)
-- Single binary, no runtime dependencies
+- Automatic CPU governor switching on power state transitions (ondemand on AC, powersave on battery) via `sudo tee`
+- Single binary, no runtime dependencies beyond a sudoers entry for governor control
 
 ## Prerequisites
 
@@ -37,12 +37,18 @@ sudo usermod -aG i2c "$USER"
 # Log out and back in for group change to take effect
 ```
 
-- For CPU governor switching, add a sudoers entry (or run waybar as a user with write access to the sysfs governor files):
+- For CPU governor switching, a sudoers entry is required so the binary can use `sudo tee` to write the governor sysfs files. If you followed the main [sway-argon-one-up setup](../README.md#12-set-up-lid-close-power-management), the `lid-power` sudoers file already includes this rule. Otherwise, add it:
 
 ```bash
 sudo tee /etc/sudoers.d/cpu-governor > /dev/null <<EOF
 $USER ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 EOF
+```
+
+- **Disable `power-profiles-daemon`** if installed — it overrides the CPU governor on boot, conflicting with this tool's governor management:
+
+```bash
+sudo systemctl disable --now power-profiles-daemon
 ```
 
 ## Build and install
@@ -177,7 +183,7 @@ const BRIGHTNESS_AC: u8 = 100;      // Brightness when plugged in (0-100)
 const BRIGHTNESS_BATTERY: u8 = 40;  // Brightness when on battery (0-100)
 ```
 
-The CPU governor is set to `ondemand` on AC and `powersave` on battery. To change these, edit the `handle_power_transition` function and rebuild.
+The CPU governor is set to `ondemand` on AC and `powersave` on battery via `sudo tee`. To change these, edit the `handle_power_transition` function and rebuild.
 
 ## License
 

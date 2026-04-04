@@ -85,12 +85,23 @@ fn set_brightness(level: u8) {
     let _ = fs::write(BRIGHTNESS_CACHE, level.to_string());
 }
 
-/// Set CPU governor on all cores.
+/// Set CPU governor on all cores via sudo tee.
 fn set_governor(governor: &str) {
     for entry in fs::read_dir("/sys/devices/system/cpu/").into_iter().flatten().flatten() {
         let path = entry.path().join("cpufreq/scaling_governor");
         if path.exists() {
-            let _ = fs::write(&path, governor);
+            let _ = process::Command::new("sudo")
+                .args(["tee", &path.to_string_lossy()])
+                .stdin(process::Stdio::piped())
+                .stdout(process::Stdio::null())
+                .stderr(process::Stdio::null())
+                .spawn()
+                .and_then(|mut child| {
+                    if let Some(ref mut stdin) = child.stdin {
+                        let _ = stdin.write_all(governor.as_bytes());
+                    }
+                    child.wait()
+                });
         }
     }
 }

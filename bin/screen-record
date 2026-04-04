@@ -1,0 +1,31 @@
+#!/bin/bash
+# Toggle screen recording with wf-recorder
+# First call starts recording, second call stops it.
+# Usage: screen-record [area]
+#   area — select a region with slurp instead of full screen
+
+VIDEOS_DIR="$HOME/Videos"
+PIDFILE="/tmp/.screen-record.pid"
+
+mkdir -p "$VIDEOS_DIR"
+
+if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    # Stop recording
+    kill -INT "$(cat "$PIDFILE")"
+    rm -f "$PIDFILE"
+    notify-send -t 2000 "󰻃 Recording saved" "$VIDEOS_DIR"
+    exit 0
+fi
+
+FILENAME="$VIDEOS_DIR/$(date +%Y%m%d_%Hh%Mm%Ss).mp4"
+
+if [ "${1:-}" = "area" ]; then
+    GEOMETRY=$(slurp 2>/dev/null)
+    [ -z "$GEOMETRY" ] && exit 0
+    wf-recorder -g "$GEOMETRY" -f "$FILENAME" &
+else
+    wf-recorder -f "$FILENAME" &
+fi
+
+echo $! > "$PIDFILE"
+notify-send -t 2000 "󰑊 Recording started" "Press Mod+Shift+R to stop"
