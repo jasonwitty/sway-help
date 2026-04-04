@@ -141,6 +141,7 @@ A waybar module for adjusting Sway's output scale on the fly — useful for find
 
 The default is 1.6x (1200x750 effective on the 1920x1200 panel). Click to reset to default.
 
+<!--
 ## WiFi stability
 
 The BCM43455 WiFi chip in the CM5 has aggressive power management that causes intermittent disconnects. This is fixed by disabling WiFi power save:
@@ -154,6 +155,7 @@ sudo nmcli general reload
 ```
 
 Verify with `iw dev wlan0 get power_save` — should show `Power save: off`.
+-->
 
 ---
 
@@ -245,56 +247,19 @@ The waybar power button is configured to call this script on click.
 
 ### Argon battery in waybar
 
-The Argon ONE UP has its own battery that isn't visible in `/sys/class/power_supply/` — it's accessed via the battery gauge IC on I2C bus 1 at address `0x64`. A purpose-built Rust binary (`argon-battery-rs`) reads the SOC and charging registers directly, outputting waybar-compatible JSON. This replaces the original approach of calling the Argon Python daemon, reducing poll overhead from ~110ms to ~22ms — enabling 1-second polling without noticeable CPU impact.
+The Argon ONE UP has its own battery that isn't visible in `/sys/class/power_supply/` — it's accessed via a fuel gauge IC on I2C bus 1 at address `0x64`. A purpose-built Rust binary ([argon-battery-rs](argon-battery-rs/)) replaces the stock Argon Python daemon's battery polling, reducing CPU usage from ~3.5% constant to near zero.
 
 **Features:**
 - Battery percentage with level-appropriate icons
-- Charging detection with distinct charging icons and yellow accent color
-- **Automatic brightness adjustment:** 100% when plugged in, 60% on battery — triggered only on power state transitions, not every poll
+- Charging detection with distinct charging icons
+- Automatic display brightness adjustment on power state transitions (100% on AC, 40% on battery)
+- Automatic CPU governor switching (ondemand on AC, powersave on battery)
 
-**1. Build and install:**
-
-```bash
-cd argon-battery-rs
-cargo build --release
-sudo cp target/release/argon-battery-rs /usr/local/bin/
-```
-
-Your user must be in the `i2c` group (no sudo needed):
-
-```bash
-sudo usermod -aG i2c "$USER"
-```
-
-**2. Add the module to waybar config:**
-
-```json
-{
-  "modules-right": ["custom/argon-battery"],
-  "custom/argon-battery": {
-    "exec": "/usr/local/bin/argon-battery-rs",
-    "return-type": "json",
-    "interval": 1,
-    "tooltip": true,
-    "on-click": "foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py"
-  }
-}
-```
-
-**3. Style it in waybar `style.css`:**
-
-```css
-#custom-argon-battery { color: #a6d189; }
-#custom-argon-battery.warning { color: #ef9f76; }
-#custom-argon-battery.critical { color: #e78284; }
-#custom-argon-battery.charging { color: #e5c890; }
-```
-
-Note: the script uses `sudo` to query the battery. This requires passwordless sudo for your user, or a targeted sudoers entry for the argon script.
+See the [argon-battery-rs README](argon-battery-rs/README.md) for build instructions, stock daemon changes, waybar/i3/GNOME integration guides, and customization options.
 
 ### Battery key binding
 
-The Argon ONE UP has a battery key between F12 and Print Screen. It registers as `Pause` in Sway. To bind it to the Argon battery dashboard:
+The Argon ONE UP has a battery key between F12 and Print Screen. It registers as `Pause` in Sway:
 
 ```
 bindsym Pause exec foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py
@@ -506,7 +471,7 @@ chmod +x ~/.local/bin/*
 
 ### 11. Build and install argon-battery-rs
 
-The battery monitor is a Rust binary that reads the Argon battery gauge directly over I2C. It powers the waybar battery indicator and auto-adjusts brightness on AC/battery transitions.
+The battery monitor is a Rust binary that reads the Argon battery gauge directly over I2C. It powers the waybar battery indicator, auto-adjusts brightness, and switches CPU governor on AC/battery transitions. See the [argon-battery-rs README](argon-battery-rs/README.md) for full details including stock daemon changes.
 
 ```bash
 cd argon-battery-rs
