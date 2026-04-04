@@ -404,7 +404,7 @@ Optional but recommended:
 
 ```bash
 sudo apt install -y \
-  firefox-esr thunar mpv imv file-roller chromium
+  firefox-esr thunar mpv imv zathura file-roller chromium
 ```
 
 ### 8b. Install GTK themes and Papirus folder colors
