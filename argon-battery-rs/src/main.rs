@@ -26,7 +26,7 @@ const DISPLAY_DDC_ADDR: u16 = 0x37;
 /// Brightness when on AC power.
 const BRIGHTNESS_AC: u8 = 100;
 /// Brightness when on battery.
-const BRIGHTNESS_BATTERY: u8 = 60;
+const BRIGHTNESS_BATTERY: u8 = 40;
 
 /// File to track last known charging state.
 const STATE_FILE: &str = "/tmp/.argon-battery-charging";
@@ -85,7 +85,17 @@ fn set_brightness(level: u8) {
     let _ = fs::write(BRIGHTNESS_CACHE, level.to_string());
 }
 
-/// Check if charging state changed and adjust brightness on transitions.
+/// Set CPU governor on all cores.
+fn set_governor(governor: &str) {
+    for entry in fs::read_dir("/sys/devices/system/cpu/").into_iter().flatten().flatten() {
+        let path = entry.path().join("cpufreq/scaling_governor");
+        if path.exists() {
+            let _ = fs::write(&path, governor);
+        }
+    }
+}
+
+/// Check if charging state changed and adjust brightness/governor on transitions.
 fn handle_power_transition(charging: bool) {
     let previous = fs::read_to_string(STATE_FILE)
         .ok()
@@ -96,6 +106,7 @@ fn handle_power_transition(charging: bool) {
     if previous != Some(current_state) {
         let brightness = if charging { BRIGHTNESS_AC } else { BRIGHTNESS_BATTERY };
         set_brightness(brightness);
+        set_governor(if charging { "ondemand" } else { "powersave" });
         let _ = fs::write(STATE_FILE, current_state.to_string());
     }
 }

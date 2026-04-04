@@ -1,0 +1,41 @@
+#!/bin/bash
+# Toggle CPU power mode: ondemand <-> powersave <-> performance
+# Usage: power-mode [toggle|get|ondemand|powersave|performance]
+
+get_governor() {
+    cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+}
+
+set_governor() {
+    local gov="$1"
+    for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo "$gov" | sudo tee "$cpu" >/dev/null
+    done
+}
+
+case "${1:-toggle}" in
+    get)
+        gov=$(get_governor)
+        case "$gov" in
+            powersave)    echo '{"text": "󰌪", "tooltip": "CPU: powersave", "class": "powersave"}' ;;
+            performance)  echo '{"text": "󱐋", "tooltip": "CPU: performance", "class": "performance"}' ;;
+            *)            echo '{"text": "󰾅", "tooltip": "CPU: '$gov'", "class": "normal"}' ;;
+        esac
+        ;;
+    toggle)
+        gov=$(get_governor)
+        case "$gov" in
+            ondemand)    set_governor powersave;    notify-send -t 2000 "󰌪 Powersave" "CPU at minimum frequency" ;;
+            powersave)   set_governor performance;  notify-send -t 2000 "󱐋 Performance" "CPU at maximum frequency" ;;
+            performance) set_governor ondemand;     notify-send -t 2000 "󰾅 Balanced" "CPU scales with demand" ;;
+            *)           set_governor ondemand;     notify-send -t 2000 "󰾅 Balanced" "CPU scales with demand" ;;
+        esac
+        ;;
+    ondemand|powersave|performance)
+        set_governor "$1"
+        ;;
+    *)
+        echo "Usage: power-mode [toggle|get|ondemand|powersave|performance]"
+        exit 1
+        ;;
+esac
