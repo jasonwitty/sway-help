@@ -145,8 +145,16 @@ fn main() {
     };
 
     let status = if charging { "Charging" } else { "Discharging" };
+    let governor = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+        .unwrap_or_default();
+    let governor = governor.trim();
+    let mode = match governor {
+        "powersave" => "powersave",
+        "performance" => "performance",
+        _ => "balanced",
+    };
 
     println!(
-        r#"{{"text": "{icon} {percent}%", "tooltip": "Argon Battery: {status} {percent}%", "class": "{class}"}}"#
+        r#"{{"text": "{icon} {percent}%", "tooltip": "Argon Battery: {status} {percent}%\nCPU: {mode}", "class": "{class}"}}"#
     );
 }
