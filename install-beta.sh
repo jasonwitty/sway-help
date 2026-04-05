@@ -354,12 +354,11 @@ fi
 phase "Phase 8: Desktop configuration"
 
 if [ -d "$REPO_DIR" ]; then
-    info "Repo already cloned, pulling latest..."
-    cd "$REPO_DIR" && git pull
-else
-    info "Cloning sway-argon-one-up..."
-    git clone "$REPO_URL" "$REPO_DIR"
+    info "Removing stale clone..."
+    rm -rf "$REPO_DIR"
 fi
+info "Cloning sway-argon-one-up..."
+git clone "$REPO_URL" "$REPO_DIR"
 
 cd "$REPO_DIR"
 
@@ -411,6 +410,7 @@ phase "Phase 10: System configuration"
 info "Enabling services..."
 sudo systemctl enable --now seatd
 sudo systemctl enable greetd
+sudo systemctl set-default graphical.target
 sudo systemctl mask --now power-profiles-daemon 2>/dev/null || true
 success "Services configured"
 
@@ -503,6 +503,16 @@ fi
 
 # ---------------------------------------------------------------------------
 # Phase 12: Cleanup and finish
+# ---------------------------------------------------------------------------
+phase "Phase 12: Set default theme"
+
+info "Applying default theme (Catppuccin Frappe)..."
+echo "frappe" > "$HOME/.config/sway-themes/current"
+"$HOME/.local/bin/switch-theme" frappe &>/dev/null || true
+success "Default theme applied"
+
+# ---------------------------------------------------------------------------
+# Phase 13: Cleanup and finish
 # ---------------------------------------------------------------------------
 phase "Installation complete!"
 
