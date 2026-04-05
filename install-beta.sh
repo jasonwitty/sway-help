@@ -197,7 +197,7 @@ sudo apt install -y \
     fonts-firacode \
     thunar mpv imv file-roller galculator zathura \
     blueman hwinfo neovim micro \
-    papirus-icon-theme libglib2.0-bin \
+    papirus-icon-theme libglib2.0-bin gsettings-desktop-schemas \
     python3 \
     git curl build-essential pkg-config unzip
 

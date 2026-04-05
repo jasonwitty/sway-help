@@ -3,7 +3,7 @@
 # Sets panel backlight in ~1ms via DDC/CI over I2C bus 14
 
 CACHE_FILE="/tmp/.brightness_level"
-WOBSOCK="/run/user/1000/wob.sock"
+WOBSOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wob.sock"
 STEP=5
 MIN=5
 MAX=100

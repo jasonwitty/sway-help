@@ -23,7 +23,7 @@
     "format": "󰍛 {usage}%",
     "interval": 5,
     "tooltip": true,
-    "on-click": "foot -e /home/jason/.cargo/bin/socktop --demo"
+    "on-click": "foot -e socktop --demo"
   },
   "pulseaudio": {
     "format": "{icon} {volume}%",

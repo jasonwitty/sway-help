@@ -57,47 +57,6 @@ function __history_previous_command_arguments
     end
 end
 
-function pi-vnc
-    set host jason@192.168.1.76
-    set lport 5901
-    set rmap "$lport:localhost:5900"
-
-    # clean old tunnel
-    set pid (lsof -t -iTCP:$lport -sTCP:LISTEN 2>/dev/null)
-    test -n "$pid"; and kill $pid 2>/dev/null; and sleep 0.2
-
-    # robust SSH tunnel with keepalives
-    ssh -f -N -L $rmap -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
-        -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new $host
-
-    # TigerVNC: fullscreen, lossless, proper cursor
-    gamescope -b -W 2304 -H 1296 -w 2560 -h 1440 -S stretch -F fsr \
-        --force-windows-fullscreen -- \
-        vncviewer localhost:5901 \
-        -FullScreen \
-        -Shared=1 -NoJPEG=1 -CompressLevel=0 -QualityLevel=9 \
-        -PreferredEncoding=ZRLE -CursorType=System -AlwaysCursor=1 -MenuKey=F9 &
-end
-
-
-#function pi-vnc
-#    set host jason@192.168.1.76
-#    set tunnel 5901:localhost:5900
-#
-#    # Clean stale listener
-#    set -l pid (lsof -t -iTCP:5901 -sTCP:LISTEN 2>/dev/null)
-#    if test -n "$pid"; kill $pid 2>/dev/null; sleep 0.2; end
-#
-#    # Make the tunnel; fail fast if auth/hostkey not OK
-#    ssh -f -N -L $tunnel -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new $host
-#
-#    # Launch 1440p VNC
-#    #vinagre vnc://localhost:5901 --geometry=2560x1440 &
-#    # or --fullscreen
-#
-#    vinagre vnc://localhost:5901 --fullscreen &
-#   
-#end
 
 
 #if [ "$fish_key_bindings" = fish_vi_key_bindings ]

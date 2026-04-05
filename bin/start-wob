@@ -2,6 +2,7 @@
 pkill -x wob 2>/dev/null
 pkill -f "tail -f.*wob.sock" 2>/dev/null
 sleep 0.3
-rm -f /run/user/1000/wob.sock
-mkfifo /run/user/1000/wob.sock
-tail -f /run/user/1000/wob.sock | wob
+WOBSOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wob.sock"
+rm -f "$WOBSOCK"
+mkfifo "$WOBSOCK"
+tail -f "$WOBSOCK" | wob

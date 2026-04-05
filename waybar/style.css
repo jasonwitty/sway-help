@@ -37,6 +37,7 @@ window#waybar {
 #custom-claude,
 #custom-help,
 #custom-theme,
+#custom-scale,
 #custom-power {
   padding: 0 8px;
 }
@@ -103,6 +104,10 @@ window#waybar {
 
 #custom-theme {
   color: #ca9ee6;
+}
+
+#custom-scale {
+  color: #99d1db;
 }
 
 #custom-power {

@@ -1,8 +1,8 @@
 #!/bin/bash
 # Called by argon daemon on lid close/open
 # Usage: lid-suspend close | lid-suspend open
-export XDG_RUNTIME_DIR=/run/user/1000
-export SWAYSOCK=/run/user/1000/sway-ipc.1000.$(pgrep -x sway).sock
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$(pgrep -x sway).sock"
 export WAYLAND_DISPLAY=wayland-1
 
 LOG="$HOME/.local/state/lid-events.log"
