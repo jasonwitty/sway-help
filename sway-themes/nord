@@ -2,8 +2,9 @@
 THEME_NAME="Nord"
 FLAVOR="nord"
 COLOR_SCHEME="prefer-dark"
-GTK_THEME="Adwaita-dark"
+GTK_THEME="Nordic"
 ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="nordic"
 WALLPAPER="$HOME/.wallpapers/nord.png"
 
 ROSEWATER="d08770"

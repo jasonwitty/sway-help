@@ -69,12 +69,16 @@
     "tooltip": false,
     "on-click": "~/.local/bin/sway-help"
   },
+  "tray": {
+    "icon-size": 16,
+    "spacing": 8
+  },
   "custom/argon-battery": {
     "exec": "/usr/local/bin/argon-battery-rs",
     "return-type": "json",
     "interval": 1,
     "tooltip": true,
-    "on-click": "foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py"
+    "on-click": "~/.local/bin/power-mode toggle"
   },
   "custom/theme": {
     "format": "󰏘 ",

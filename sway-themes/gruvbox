@@ -2,8 +2,9 @@
 THEME_NAME="Gruvbox Dark"
 FLAVOR="gruvbox"
 COLOR_SCHEME="prefer-dark"
-GTK_THEME="Adwaita-dark"
+GTK_THEME="Gruvbox-Dark"
 ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="brown"
 WALLPAPER="$HOME/.wallpapers/gruvbox.png"
 
 ROSEWATER="d65d0e"

@@ -2,8 +2,9 @@
 THEME_NAME="Catppuccin Latte"
 FLAVOR="latte"
 COLOR_SCHEME="prefer-light"
-GTK_THEME="Adwaita"
+GTK_THEME="catppuccin-latte-blue-standard+default"
 ICON_THEME="Papirus"
+FOLDER_COLOR="blue"
 WALLPAPER="$HOME/.wallpapers/latte.png"
 
 ROSEWATER="dc8a78"

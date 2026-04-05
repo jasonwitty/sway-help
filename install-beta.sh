@@ -226,6 +226,12 @@ if [ "$INSTALL_WEBAPPS" = "y" ]; then
     success "WebApps installed"
 fi
 
+# Debian ships bat as batcat — create a symlink so scripts can use 'bat'
+if [ -x /usr/bin/batcat ] && [ ! -e /usr/local/bin/bat ]; then
+    sudo ln -s /usr/bin/batcat /usr/local/bin/bat
+    success "Created bat symlink (batcat → bat)"
+fi
+
 success "System packages installed"
 
 # ---------------------------------------------------------------------------
@@ -368,6 +374,7 @@ info "Copying config files..."
 mkdir -p ~/.config
 cp -r sway waybar wob wofi foot mako swaylock gtk-3.0 sway-themes fish ~/.config/
 cp starship.toml ~/.config/
+cp mimeapps.list ~/.config/
 
 # Wallpapers
 cp -r wallpapers ~/.wallpapers
@@ -485,16 +492,8 @@ if [ "$INSTALL_CLAUDE" = "y" ]; then
     if command -v claude &>/dev/null; then
         success "Claude Code already installed"
     else
-        # Install Node.js if not present
-        if ! command -v node &>/dev/null; then
-            info "Installing Node.js..."
-            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-            sudo apt install -y nodejs
-            success "Node.js installed"
-        fi
-
         info "Installing Claude Code..."
-        sudo npm install -g @anthropic-ai/claude-code
+        curl -fsSL https://claude.ai/install.sh | bash
         success "Claude Code installed"
         echo ""
         info "Run 'claude' after rebooting to authenticate."

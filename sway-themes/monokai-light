@@ -4,6 +4,7 @@ FLAVOR="monokai-light"
 COLOR_SCHEME="prefer-light"
 GTK_THEME="Adwaita"
 ICON_THEME="Papirus"
+FOLDER_COLOR="deeporange"
 WALLPAPER="$HOME/.wallpapers/monokai-light.jpg"
 
 ROSEWATER="f4005f"

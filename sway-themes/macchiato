@@ -2,8 +2,9 @@
 THEME_NAME="Catppuccin Macchiato"
 FLAVOR="macchiato"
 COLOR_SCHEME="prefer-dark"
-GTK_THEME="Adwaita-dark"
+GTK_THEME="catppuccin-macchiato-blue-standard+default"
 ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="indigo"
 WALLPAPER="$HOME/.wallpapers/macchiato.png"
 
 ROSEWATER="f4dbd6"

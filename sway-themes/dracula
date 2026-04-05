@@ -2,8 +2,9 @@
 THEME_NAME="Dracula"
 FLAVOR="dracula"
 COLOR_SCHEME="prefer-dark"
-GTK_THEME="Adwaita-dark"
+GTK_THEME="Dracula"
 ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="violet"
 WALLPAPER="$HOME/.wallpapers/dracula.png"
 
 ROSEWATER="ff79c6"
