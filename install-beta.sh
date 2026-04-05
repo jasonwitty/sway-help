@@ -206,6 +206,7 @@ sudo apt install -y \
     thunar mpv imv file-roller galculator zathura \
     blueman hwinfo neovim micro \
     papirus-icon-theme libglib2.0-bin gsettings-desktop-schemas \
+    xdg-user-dirs \
     python3 \
     git curl build-essential pkg-config unzip
 
@@ -443,6 +444,11 @@ success "Services configured"
 info "Adding user to required groups..."
 sudo usermod -aG video,audio,input,render,i2c "$USER"
 success "User groups updated"
+
+# Create standard XDG user directories (Desktop, Documents, Downloads, etc.)
+info "Creating user directories..."
+xdg-user-dirs-update
+success "User directories created"
 
 # Sudoers for lid-suspend, CPU governor, USB bind/unbind
 info "Configuring sudoers for power management..."
