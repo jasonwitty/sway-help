@@ -137,6 +137,7 @@ info "All prompts happen now — nothing is installed until you confirm."
 INSTALL_BRAVE="n"
 INSTALL_CHROMIUM="n"
 INSTALL_WEBAPPS="n"
+INSTALL_FLATPAK="n"
 INSTALL_CLAUDE="n"
 
 prompt_yn "INSTALL_BRAVE" "Brave Browser" \
@@ -155,6 +156,12 @@ prompt_yn "INSTALL_WEBAPPS" "WebApps (Linux Mint)" \
     "Running on ARM, you will quickly find that not every app is packaged for your
 architecture. WebApps lets you pin sites like Slack or Teams as standalone
 windows with their own icons — no browser tabs needed."
+
+prompt_yn "INSTALL_FLATPAK" "Flatpak + Bazaar App Store" \
+    "Flatpak lets you install sandboxed desktop apps from Flathub — useful when
+native ARM packages are not available. Bazaar is a fast, modern app store for
+browsing and managing Flatpak apps. This installs Flatpak, adds the Flathub
+repository, and installs Bazaar as your graphical app store."
 
 prompt_yn "INSTALL_CLAUDE" "Claude Code" \
     "Claude Code is an AI coding assistant that lives in your terminal. It can read
@@ -224,6 +231,16 @@ if [ "$INSTALL_WEBAPPS" = "y" ]; then
     sudo apt install -y "$WEBAPPS_DEB"
     rm -f "$WEBAPPS_DEB"
     success "WebApps installed"
+fi
+
+# Optional: Flatpak + Bazaar
+if [ "$INSTALL_FLATPAK" = "y" ]; then
+    info "Installing Flatpak..."
+    sudo apt install -y flatpak
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    info "Installing Bazaar app store..."
+    flatpak install -y flathub io.github.kolunmi.Bazaar
+    success "Flatpak + Bazaar installed"
 fi
 
 # Debian ships bat as batcat — create a symlink so scripts can use 'bat'
@@ -528,6 +545,7 @@ echo "Keybindings:"
 echo "  Mod+Enter     Terminal"
 echo "  Mod+D         App launcher"
 echo "  Mod+T         Theme picker"
+echo "  Mod+N         File manager"
 echo "  Mod+B         Brave browser"
 echo "  Mod+C         Claude Code"
 echo "  Mod+=         Calculator"

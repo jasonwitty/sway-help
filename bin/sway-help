@@ -137,6 +137,7 @@ BEGIN {
         else if (cmd ~ /grim -g/) desc = "Area Screenshot → Clipboard"
         else if (cmd ~ /^grim$/) desc = "Full Screenshot"
         else if (cmd ~ /sway-help/) desc = "Keybinding Help"
+        else if (cmd ~ /thunar/) desc = "File Manager"
         else if (cmd ~ /swaynag/) desc = "Exit Sway"
         else if (cmd ~ /powermenu/) desc = "Power Menu"
         else desc = cmd
