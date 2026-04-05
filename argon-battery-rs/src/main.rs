@@ -45,8 +45,10 @@ fn read_battery() -> Result<(u8, bool), Box<dyn core::error::Error>> {
     let percent = soc.min(100);
 
     let current_high = dev.smbus_read_byte_data(CURRENT_HIGH_REG)?;
-    // Bit 7 set = discharging, clear = charging (Argon inverted logic)
-    let charging = (current_high & 0x80) == 0;
+    // Bit 7 set = discharging, clear = charging (Argon inverted logic).
+    // At 100% SOC on AC the charge current is zero and noise tips the sign
+    // bit negative (0xFF), so treat near-zero discharge as "charging".
+    let charging = (current_high & 0x80) == 0 || current_high == 0xFF;
 
     Ok((percent, charging))
 }

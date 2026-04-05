@@ -411,7 +411,7 @@ phase "Phase 10: System configuration"
 info "Enabling services..."
 sudo systemctl enable --now seatd
 sudo systemctl enable greetd
-sudo systemctl disable --now power-profiles-daemon 2>/dev/null || true
+sudo systemctl mask --now power-profiles-daemon 2>/dev/null || true
 success "Services configured"
 
 # User groups
