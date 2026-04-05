@@ -30,6 +30,10 @@ const BRIGHTNESS_BATTERY: u8 = 40;
 
 /// File to track last known charging state.
 const STATE_FILE: &str = "/tmp/.argon-battery-charging";
+/// Consecutive new-state reads required before triggering a transition.
+const PENDING_FILE: &str = "/tmp/.argon-battery-pending";
+/// Number of consecutive agreeing reads required to confirm a state change.
+const CONFIRM_COUNT: u8 = 3;
 /// Brightness cache file (shared with brightness script).
 const BRIGHTNESS_CACHE: &str = "/tmp/.brightness_level";
 
@@ -107,18 +111,41 @@ fn set_governor(governor: &str) {
 }
 
 /// Check if charging state changed and adjust brightness/governor on transitions.
+/// If the state file doesn't exist yet, power-startup hasn't finished initialising
+/// — skip transition handling so we don't race against it.
+/// Requires CONFIRM_COUNT consecutive reads in the new state before acting,
+/// which filters out transient I2C misreads.
 fn handle_power_transition(charging: bool) {
-    let previous = fs::read_to_string(STATE_FILE)
-        .ok()
-        .and_then(|val| val.trim().parse::<u8>().ok());
+    let previous = match fs::read_to_string(STATE_FILE) {
+        Ok(val) => val.trim().parse::<u8>().ok(),
+        Err(_) => return, // state file missing — power-startup hasn't run yet
+    };
 
     let current_state: u8 = u8::from(charging);
 
-    if previous != Some(current_state) {
+    if previous == Some(current_state) {
+        // State unchanged — clear any pending transition counter
+        let _ = fs::remove_file(PENDING_FILE);
+        return;
+    }
+
+    // State differs — increment the pending counter
+    let pending_count = fs::read_to_string(PENDING_FILE)
+        .ok()
+        .and_then(|v| v.trim().parse::<u8>().ok())
+        .unwrap_or(0)
+        + 1;
+
+    if pending_count >= CONFIRM_COUNT {
+        // Confirmed transition — apply brightness and governor
         let brightness = if charging { BRIGHTNESS_AC } else { BRIGHTNESS_BATTERY };
         set_brightness(brightness);
         set_governor(if charging { "ondemand" } else { "powersave" });
         let _ = fs::write(STATE_FILE, current_state.to_string());
+        let _ = fs::remove_file(PENDING_FILE);
+    } else {
+        // Not yet confirmed — record the count and wait for next poll
+        let _ = fs::write(PENDING_FILE, pending_count.to_string());
     }
 }
 

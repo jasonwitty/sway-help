@@ -49,7 +49,7 @@ prompt_yn() {
     echo -e "${BOLD}${title}${NC}"
     echo -e "${DIM}${description}${NC}"
     echo ""
-    read -rp "Install ${title}? [y/N] " response
+    read -rp "Install ${title}? [y/N] " response </dev/tty
     if [[ "$response" =~ ^[Yy]$ ]]; then
         eval "$varname=y"
     else
@@ -75,7 +75,7 @@ fi
 ARCH=$(uname -m)
 if [ "$ARCH" != "aarch64" ]; then
     warn "Expected aarch64 architecture, got ${ARCH}. This installer is designed for Raspberry Pi."
-    read -rp "Continue anyway? [y/N] " response
+    read -rp "Continue anyway? [y/N] " response </dev/tty
     [[ "$response" =~ ^[Yy]$ ]] || exit 1
 fi
 
@@ -84,7 +84,7 @@ if [ -f /etc/os-release ]; then
     . /etc/os-release
     if [[ "${VERSION_CODENAME:-}" != "trixie" ]]; then
         warn "Expected Debian Trixie, got ${VERSION_CODENAME:-unknown}."
-        read -rp "Continue anyway? [y/N] " response
+        read -rp "Continue anyway? [y/N] " response </dev/tty
         [[ "$response" =~ ^[Yy]$ ]] || exit 1
     fi
 else
@@ -118,7 +118,7 @@ success "Internet connectivity"
 AVAIL_KB=$(df --output=avail /home | tail -1 | tr -d ' ')
 if [ "$AVAIL_KB" -lt 1048576 ]; then
     warn "Less than 1GB free disk space. Installation may fail."
-    read -rp "Continue anyway? [y/N] " response
+    read -rp "Continue anyway? [y/N] " response </dev/tty
     [[ "$response" =~ ^[Yy]$ ]] || exit 1
 else
     success "Disk space: $(( AVAIL_KB / 1024 ))MB available"
@@ -165,6 +165,14 @@ Claude and Mod+Shift+C for a quick-prompt popup via wofi."
 echo ""
 info "Selections saved. Starting installation..."
 echo ""
+
+# Prompt for sudo password once now, then keep it alive for the entire install
+# so the user is never interrupted by a password prompt mid-run.
+info "Requesting sudo access..."
+sudo -v
+while true; do sudo -n true; sleep 120; done 2>/dev/null &
+SUDO_KEEPALIVE_PID=$!
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 
 # ---------------------------------------------------------------------------
 # Phase 3: System packages
@@ -408,7 +416,7 @@ success "Services configured"
 
 # User groups
 info "Adding user to required groups..."
-sudo usermod -aG seat,video,audio,input,render,i2c "$USER"
+sudo usermod -aG video,audio,input,render,i2c "$USER"
 success "User groups updated"
 
 # Sudoers for lid-suspend, CPU governor, USB bind/unbind
