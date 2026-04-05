@@ -200,7 +200,8 @@ sudo apt install -y \
     ddcutil i2c-tools \
     fish \
     bat eza fzf zoxide ugrep \
-    grim slurp wl-clipboard wf-recorder \
+    grim slurp wl-clipboard wf-recorder libnotify-bin \
+    xdg-desktop-portal-wlr \
     fonts-firacode \
     thunar mpv imv file-roller galculator zathura \
     blueman hwinfo neovim micro \
