@@ -239,9 +239,9 @@ fi
 if [ "$INSTALL_FLATPAK" = "y" ]; then
     info "Installing Flatpak..."
     sudo apt install -y flatpak
-    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo </dev/null >/dev/null 2>&1
     info "Installing Bazaar app store..."
-    sudo flatpak install -y flathub io.github.kolunmi.Bazaar
+    sudo flatpak install --noninteractive -y flathub io.github.kolunmi.Bazaar </dev/null >/dev/null 2>&1
     success "Flatpak + Bazaar installed"
 fi
 
