@@ -55,7 +55,11 @@ fn read_battery() -> Result<(u8, bool), Box<dyn core::error::Error>> {
 
 /// Set display brightness via DDC/CI over I2C bus 14.
 fn set_brightness(level: u8) {
-    let Ok(file) = fs::OpenOptions::new().read(true).write(true).open(DISPLAY_I2C_BUS) else {
+    let Ok(file) = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(DISPLAY_I2C_BUS)
+    else {
         return;
     };
 
@@ -72,15 +76,11 @@ fn set_brightness(level: u8) {
     let value_high: u8 = 0x00;
     #[allow(clippy::cast_possible_truncation)]
     let ddc_addr_byte = DISPLAY_DDC_ADDR as u8;
-    let checksum = (ddc_addr_byte << 1)
-        ^ source
-        ^ length
-        ^ opcode
-        ^ vcp_code
-        ^ value_high
-        ^ level;
+    let checksum = (ddc_addr_byte << 1) ^ source ^ length ^ opcode ^ vcp_code ^ value_high ^ level;
 
-    let buf = [source, length, opcode, vcp_code, value_high, level, checksum];
+    let buf = [
+        source, length, opcode, vcp_code, value_high, level, checksum,
+    ];
 
     // Write may fail silently — that's fine for a best-effort brightness set
     let mut writer = std::io::BufWriter::new(&file);
@@ -93,7 +93,11 @@ fn set_brightness(level: u8) {
 
 /// Set CPU governor on all cores via sudo tee.
 fn set_governor(governor: &str) {
-    for entry in fs::read_dir("/sys/devices/system/cpu/").into_iter().flatten().flatten() {
+    for entry in fs::read_dir("/sys/devices/system/cpu/")
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
         let path = entry.path().join("cpufreq/scaling_governor");
         if path.exists() {
             let _ = process::Command::new("sudo")
@@ -140,7 +144,11 @@ fn handle_power_transition(charging: bool) {
 
     if pending_count >= CONFIRM_COUNT {
         // Confirmed transition — apply brightness and governor
-        let brightness = if charging { BRIGHTNESS_AC } else { BRIGHTNESS_BATTERY };
+        let brightness = if charging {
+            BRIGHTNESS_AC
+        } else {
+            BRIGHTNESS_BATTERY
+        };
         set_brightness(brightness);
         set_governor(if charging { "ondemand" } else { "powersave" });
         let _ = fs::write(STATE_FILE, current_state.to_string());

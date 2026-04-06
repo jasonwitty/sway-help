@@ -1,15 +1,16 @@
 #!/bin/bash
 # Called by argon daemon on lid close/open
 # Usage: lid-suspend close | lid-suspend open
-export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-export SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$(pgrep -x sway).sock"
+XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export XDG_RUNTIME_DIR
+SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$(pgrep -x sway).sock"
+export SWAYSOCK
 export WAYLAND_DISPLAY=wayland-1
 
 LOG="$HOME/.local/state/lid-events.log"
 mkdir -p "$(dirname "$LOG")"
 
 # Find webcam USB device path by vendor:product ID
-WEBCAM_ID="11cc:2812"
 find_webcam() {
     for dev in /sys/bus/usb/devices/*/idVendor; do
         devdir="$(dirname "$dev")"

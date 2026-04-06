@@ -10,4 +10,6 @@ prompt=$(wofi --show dmenu \
 
 [ -z "$prompt" ] && exit 0
 
-foot -e fish -c "claude \"$prompt\"; exec fish"
+# Single quotes intentional: fish expands the env var, not bash
+# shellcheck disable=SC2016
+CLAUDE_PROMPT="$prompt" foot -e fish -c 'claude "$CLAUDE_PROMPT"; exec fish'

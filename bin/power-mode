@@ -19,7 +19,7 @@ case "${1:-toggle}" in
         case "$gov" in
             powersave)    echo '{"text": "󰌪", "tooltip": "CPU: powersave", "class": "powersave"}' ;;
             performance)  echo '{"text": "󱐋", "tooltip": "CPU: performance", "class": "performance"}' ;;
-            *)            echo '{"text": "󰾅", "tooltip": "CPU: '$gov'", "class": "normal"}' ;;
+            *)            echo '{"text": "󰾅", "tooltip": "CPU: '"$gov"'", "class": "normal"}' ;;
         esac
         ;;
     toggle)

@@ -81,6 +81,7 @@ fi
 
 # Debian version check
 if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
     . /etc/os-release
     if [[ "${VERSION_CODENAME:-}" != "trixie" ]]; then
         warn "Expected Debian Trixie, got ${VERSION_CODENAME:-unknown}."
@@ -263,11 +264,13 @@ if command -v cargo &>/dev/null; then
 else
     info "Installing Rust toolchain..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    # shellcheck source=/dev/null
     source "$HOME/.cargo/env"
     success "Rust toolchain installed"
 fi
 
 # Ensure cargo is in PATH for this session
+# shellcheck source=/dev/null
 source "$HOME/.cargo/env" 2>/dev/null || true
 
 if command -v pfetch &>/dev/null; then

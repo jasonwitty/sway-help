@@ -1,0 +1,17 @@
+# Build artifacts
+target/
+*.o
+*.so
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+.*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dev notes (internal planning docs)
+notes/

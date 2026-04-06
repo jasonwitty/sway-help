@@ -56,6 +56,7 @@ apply_theme() {
     fi
 
     # Source the color definitions
+    # shellcheck source=/dev/null
     source "$flavor_file"
 
     # Render all templates
@@ -109,9 +110,9 @@ apply_theme() {
     reload_foot_colors
     makoctl reload 2>/dev/null
     # Restart waybar to pick up new style.css
-    pkill -x waybar 2>/dev/null; sleep 0.3; waybar &disown 2>/dev/null
+    pkill -x waybar 2>/dev/null; sleep 0.3; waybar & disown 2>/dev/null
     # Restart wob to pick up new wob.ini colors
-    ~/.local/bin/start-wob &disown 2>/dev/null
+    ~/.local/bin/start-wob & disown 2>/dev/null
 
     echo "Switched to $THEME_NAME"
 }
@@ -185,7 +186,7 @@ set_wallpaper() {
     if [ -n "$wp" ] && [ -f "$wp" ]; then
         pkill -x swaybg 2>/dev/null
         sleep 0.2
-        swaybg -o '*' -i "$wp" -m fill &disown 2>/dev/null
+        swaybg -o '*' -i "$wp" -m fill & disown 2>/dev/null
     fi
 }
 
@@ -233,6 +234,7 @@ case "${1:-}" in
         rm -f "$WALLPAPER_OVERRIDE"
         current=$(current_flavor)
         if [ -n "$current" ]; then
+            # shellcheck source=/dev/null
             source "$THEMES_DIR/$current"
             set_wallpaper "${WALLPAPER:-}"
             echo "Wallpaper reset to $current theme default"
