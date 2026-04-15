@@ -80,6 +80,11 @@ fn timestamp_string() -> String {
 }
 
 fn log_dir() -> PathBuf {
+    // Write to tmpfs to avoid waking the NVMe during lid-closed testing
+    PathBuf::from("/dev/shm/lid-power")
+}
+
+fn archive_dir() -> PathBuf {
     let home = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     PathBuf::from(home).join(".local/state/lid-power")
 }
@@ -122,15 +127,20 @@ fn cmd_start(args: &[String]) {
         libc::signal(libc::SIGINT, handle_signal as *const () as libc::sighandler_t);
     }
 
-    // Create log directory and file
+    // Create log directory (tmpfs) and archive directory (persistent)
     let dir = log_dir();
     fs::create_dir_all(&dir).ok();
-    let log_path = dir.join(format!("{}.csv", timestamp_string()));
-    let log_path_str = log_path.to_string_lossy().to_string();
+    let fname = format!("{}.csv", timestamp_string());
+    let log_path = dir.join(&fname);
 
-    // Write PID and log path
+    let archive = archive_dir();
+    fs::create_dir_all(&archive).ok();
+    let archive_path = archive.join(&fname);
+    let archive_path_str = archive_path.to_string_lossy().to_string();
+
+    // Write PID and archive path (where stop will find the final log)
     fs::write(PID_FILE, process::id().to_string()).ok();
-    fs::write(LOGPATH_FILE, &log_path_str).ok();
+    fs::write(LOGPATH_FILE, &archive_path_str).ok();
 
     let mut file = match fs::File::create(&log_path) {
         Ok(f) => f,
@@ -154,7 +164,7 @@ fn cmd_start(args: &[String]) {
     }
     let _ = writeln!(file, "epoch,soc,temp_mc,current_raw");
 
-    eprintln!("Logging to {log_path_str} every {interval}s (label: {label})");
+    eprintln!("Logging to {archive_path_str} every {interval}s (label: {label})");
 
     // Logging loop
     while RUNNING.load(Ordering::SeqCst) {
@@ -188,6 +198,14 @@ fn cmd_start(args: &[String]) {
     }
 
     let _ = file.flush();
+    drop(file);
+
+    // Copy log from tmpfs to persistent storage
+    let archive_path = archive_dir().join(log_path.file_name().unwrap_or_default());
+    if let Err(e) = fs::copy(&log_path, &archive_path) {
+        eprintln!("Warning: failed to archive log: {e}");
+    }
+
     cleanup_pid();
     eprintln!("Logger stopped.");
 }
