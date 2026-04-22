@@ -1,0 +1,36 @@
+# Reference: /etc/sudoers.d/lid-power
+# These entries allow lid-suspend to run power management commands without password prompts.
+# The installer should create this file during setup.
+
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill block wifi
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill unblock wifi
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill block bluetooth
+jason ALL=(ALL) NOPASSWD: /usr/sbin/rfkill unblock bluetooth
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/unbind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/bind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/module/pcie_aspm/parameters/policy
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/devices/*/power/control
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /proc/sys/vm/laptop_mode
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /proc/sys/vm/dirty_writeback_centisecs
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop ModemManager.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start ModemManager.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop avahi-daemon.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start avahi-daemon.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop fwupd.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fwupd.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop smartmontools.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start smartmontools.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop docker.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start docker.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop containerd.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start containerd.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop socktop-agent.service
+jason ALL=(ALL) NOPASSWD: /usr/bin/systemctl start socktop-agent.service
+jason ALL=(ALL) NOPASSWD: /usr/sbin/nvme set-feature /dev/nvme0 -f 2 -V 0
+jason ALL=(ALL) NOPASSWD: /usr/sbin/nvme set-feature /dev/nvme0 -f 2 -V 4
+jason ALL=(ALL) NOPASSWD: /usr/sbin/nvme get-feature /dev/nvme0 -f 2
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/platform/drivers/dwc2/unbind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/platform/drivers/dwc2/bind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/platform/drivers/xhci-hcd/unbind
+jason ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/platform/drivers/xhci-hcd/bind

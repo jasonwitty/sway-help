@@ -1,0 +1,74 @@
+/*
+ * DT overlay to add PSCI idle states to BCM2712 (Raspberry Pi 5)
+ *
+ * The stock Pi 5 DTB has no idle-states node, so the PSCI cpuidle
+ * driver never registers. This overlay adds a single power-down
+ * idle state so the cpuidle driver can take over from the default WFI.
+ *
+ * Phase 2: Power-down state (matches RK3588 / other Cortex-A76 platforms).
+ * arm,psci-suspend-param = <0x00010000>:
+ *   - Type bit [16] = 1  → power-down (context lost, must be restored)
+ *   - Affinity level [25:24] = 0 → CPU-level
+ *   - StateID [15:0] = 0 → platform-defined
+ *
+ * Phase 1 used retention (0x00000000) but BCM2712 firmware rejected it
+ * ~530M times in 4 minutes with zero successes. Power-down is what
+ * other PSCI Cortex-A76 platforms (RK3588) implement.
+ *
+ * local-timer-stop: arch timer halts during power-down, kernel must
+ * use a broadcast timer or skip local timer events.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2712";
+
+	fragment@0 {
+		target = <&cpu0>;
+		__overlay__ {
+			cpu-idle-states = <&cpu_powerdown>;
+		};
+	};
+
+	fragment@1 {
+		target = <&cpu1>;
+		__overlay__ {
+			cpu-idle-states = <&cpu_powerdown>;
+		};
+	};
+
+	fragment@2 {
+		target = <&cpu2>;
+		__overlay__ {
+			cpu-idle-states = <&cpu_powerdown>;
+		};
+	};
+
+	fragment@3 {
+		target = <&cpu3>;
+		__overlay__ {
+			cpu-idle-states = <&cpu_powerdown>;
+		};
+	};
+
+	fragment@4 {
+		target-path = "/cpus";
+		__overlay__ {
+			idle-states {
+				entry-method = "psci";
+
+				cpu_powerdown: cpu-powerdown {
+					compatible = "arm,idle-state";
+					arm,psci-suspend-param = <0x00010000>;
+					local-timer-stop;
+					entry-latency-us = <100>;
+					exit-latency-us = <120>;
+					min-residency-us = <1000>;
+					idle-state-name = "cpu-powerdown";
+				};
+			};
+		};
+	};
+};

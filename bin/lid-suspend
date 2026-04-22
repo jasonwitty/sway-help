@@ -1,16 +1,37 @@
 #!/bin/bash
 # Called by argon daemon on lid close/open
 # Usage: lid-suspend close | lid-suspend open
-XDG_RUNTIME_DIR="/run/user/$(id -u)"
-export XDG_RUNTIME_DIR
-SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$(pgrep -x sway).sock"
-export SWAYSOCK
+export XDG_RUNTIME_DIR=/run/user/1000
+export SWAYSOCK=/run/user/1000/sway-ipc.1000.$(pgrep -x sway).sock
 export WAYLAND_DISPLAY=wayland-1
 
 LOG="$HOME/.local/state/lid-events.log"
 mkdir -p "$(dirname "$LOG")"
+DROPINS="$HOME/.config/lid-suspend.d"
+
+# Run [close] or [open] sections from ~/.config/lid-suspend.d/*.conf
+run_dropins() {
+    local action="$1"
+    [ -d "$DROPINS" ] || return
+    for conf in "$DROPINS"/*.conf; do
+        [ -f "$conf" ] || continue
+        local in_section=false
+        while IFS= read -r line; do
+            case "$line" in
+                "[$action]") in_section=true; continue ;;
+                "["*"]")     in_section=false; continue ;;
+                "#"*|"")     continue ;;
+            esac
+            if $in_section; then
+                eval "$line" 2>/dev/null
+            fi
+        done < "$conf"
+        log "drop-in: $(basename "$conf") [$action]"
+    done
+}
 
 # Find webcam USB device path by vendor:product ID
+WEBCAM_ID="11cc:2812"
 find_webcam() {
     for dev in /sys/bus/usb/devices/*/idVendor; do
         devdir="$(dirname "$dev")"
@@ -24,63 +45,148 @@ find_webcam() {
 
 log() { echo "  $1" >> "$LOG"; }
 
+# User services to stop on lid close, restart on lid open
+USER_SERVICES_STOP=(
+    pipewire.socket
+    pipewire-pulse.socket
+    wireplumber.service
+    pipewire.service
+    mpris-proxy.service
+    obex.service
+    at-spi-dbus-bus.service
+    xdg-desktop-portal.service
+    xdg-desktop-portal-wlr.service
+    xdg-desktop-portal-gtk.service
+    gvfs-afc-volume-monitor.service
+    gvfs-goa-volume-monitor.service
+    gvfs-gphoto2-volume-monitor.service
+    gvfs-mtp-volume-monitor.service
+    gvfs-udisks2-volume-monitor.service
+    evolution-addressbook-factory.service
+    evolution-source-registry.service
+)
+
+USER_SERVICES_START=(
+    pipewire.socket
+    pipewire-pulse.socket
+    wireplumber.service
+)
+
+# System services to stop on lid close (non-essential)
+SYSTEM_SERVICES=(
+    ModemManager.service
+    avahi-daemon.service
+    fwupd.service
+    smartmontools.service
+)
+
 case "$1" in
     close)
         echo "=== LID CLOSE $(date '+%Y-%m-%d %H:%M:%S') ===" >> "$LOG"
 
+        lid-power-test start --interval 30 --label "optimized-v3-usb-off" &
+        log "power-test: started (pid $!)"
+
         swaylock -f &
         sleep 0.5
         swaymsg "output * power off"
-        log "display: off"
+        swaymsg "output * disable"
+        log "display: off + disabled"
 
+        # CPU governor
         echo powersave | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
         log "cpu governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
 
+        # WiFi & Bluetooth radios
         sudo rfkill block wifi
         sudo rfkill block bluetooth
         log "wifi: $(rfkill list wifi | grep -o 'Soft blocked: .*')"
         log "bluetooth: $(rfkill list bluetooth | grep -o 'Soft blocked: .*')"
 
-        WEBCAM=$(find_webcam)
-        if [ -n "$WEBCAM" ]; then
-            echo "$WEBCAM" | sudo tee /sys/bus/usb/drivers/usb/unbind > /dev/null 2>&1
-            log "webcam ($WEBCAM): unbound"
-        else
-            log "webcam: not found (already unbound or disconnected)"
-        fi
+        # Power off all USB controllers (lid detection is GPIO, not USB)
+        echo 1000480000.usb | sudo tee /sys/bus/platform/drivers/dwc2/unbind > /dev/null 2>&1
+        echo xhci-hcd.0 | sudo tee /sys/bus/platform/drivers/xhci-hcd/unbind > /dev/null 2>&1
+        echo xhci-hcd.1 | sudo tee /sys/bus/platform/drivers/xhci-hcd/unbind > /dev/null 2>&1
+        log "usb: all controllers unbound (dwc2 + xhci x2)"
+
+        # PCIe ASPM deep sleep
+        echo powersupersave | sudo tee /sys/module/pcie_aspm/parameters/policy > /dev/null
+        log "pcie aspm: $(cat /sys/module/pcie_aspm/parameters/policy)"
+
+        # Reduce disk wakeups
+        echo 5 | sudo tee /proc/sys/vm/laptop_mode > /dev/null
+        echo 6000 | sudo tee /proc/sys/vm/dirty_writeback_centisecs > /dev/null
+        log "disk: laptop_mode=5, dirty_writeback=6000"
+
+        # Stop user services
+        systemctl --user stop "${USER_SERVICES_STOP[@]}" 2>/dev/null
+        log "user services: stopped $(echo "${USER_SERVICES_STOP[@]}" | wc -w) services"
+
+        # Stop non-essential system services
+        for svc in "${SYSTEM_SERVICES[@]}"; do
+            sudo systemctl stop "$svc" 2>/dev/null
+        done
+        log "system services: stopped ${SYSTEM_SERVICES[*]}"
+
+        # NVMe deep sleep (PS4 = 5mW, vs PS0 = up to 8W)
+        sudo nvme set-feature /dev/nvme0 -f 2 -V 4 > /dev/null 2>&1
+        log "nvme: power state $(sudo nvme get-feature /dev/nvme0 -f 2 2>/dev/null | grep -o 'value:.*')"
+
+        # User drop-in configs
+        run_dropins close
         ;;
+
     open)
         echo "=== LID OPEN $(date '+%Y-%m-%d %H:%M:%S') ===" >> "$LOG"
 
-        swaymsg "output * power on"
-        log "display: on"
+        lid-power-test stop 2>>"$LOG"
+        log "power-test: stopped"
 
+        # NVMe wake (back to PS0)
+        sudo nvme set-feature /dev/nvme0 -f 2 -V 0 > /dev/null 2>&1
+        log "nvme: power state $(sudo nvme get-feature /dev/nvme0 -f 2 2>/dev/null | grep -o 'value:.*')"
+
+        swaymsg "output * enable"
+        swaymsg "output * power on"
+        log "display: enabled + on"
+
+        # CPU governor
         echo ondemand | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
         log "cpu governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
 
+        # WiFi & Bluetooth radios
         sudo rfkill unblock wifi
         sudo rfkill unblock bluetooth
         log "wifi: $(rfkill list wifi | grep -o 'Soft blocked: .*')"
         log "bluetooth: $(rfkill list bluetooth | grep -o 'Soft blocked: .*')"
 
-        # Rebind webcam — after unbind the sysfs entry still exists, so we can find it
-        WEBCAM=$(find_webcam)
-        if [ -z "$WEBCAM" ]; then
-            # Fallback: scan for unbound device by ID in sysfs
-            for dev in /sys/bus/usb/devices/*/idVendor; do
-                devdir="$(dirname "$dev")"
-                if [ "$(cat "$devdir/idVendor" 2>/dev/null)" = "11cc" ] &&
-                   [ "$(cat "$devdir/idProduct" 2>/dev/null)" = "2812" ]; then
-                    WEBCAM=$(basename "$devdir")
-                    break
-                fi
-            done
-        fi
-        if [ -n "$WEBCAM" ]; then
-            echo "$WEBCAM" | sudo tee /sys/bus/usb/drivers/usb/bind > /dev/null 2>&1
-            log "webcam ($WEBCAM): bound"
-        else
-            log "webcam: not found"
-        fi
+        # Rebind all USB controllers
+        echo 1000480000.usb | sudo tee /sys/bus/platform/drivers/dwc2/bind > /dev/null 2>&1
+        echo xhci-hcd.0 | sudo tee /sys/bus/platform/drivers/xhci-hcd/bind > /dev/null 2>&1
+        echo xhci-hcd.1 | sudo tee /sys/bus/platform/drivers/xhci-hcd/bind > /dev/null 2>&1
+        sleep 1
+        log "usb: all controllers rebound ($(lsusb 2>/dev/null | wc -l) devices)"
+
+        # Restore PCIe ASPM
+        echo default | sudo tee /sys/module/pcie_aspm/parameters/policy > /dev/null
+        log "pcie aspm: $(cat /sys/module/pcie_aspm/parameters/policy)"
+
+        # Restore disk writeback
+        echo 0 | sudo tee /proc/sys/vm/laptop_mode > /dev/null
+        echo 500 | sudo tee /proc/sys/vm/dirty_writeback_centisecs > /dev/null
+        log "disk: laptop_mode=0, dirty_writeback=500"
+
+        # Restart user services (pipewire via socket activation, rest on-demand)
+        systemctl --user start "${USER_SERVICES_START[@]}" 2>/dev/null
+        log "user services: restarted pipewire stack"
+
+        # Restart system services
+        for svc in "${SYSTEM_SERVICES[@]}"; do
+            sudo systemctl start "$svc" 2>/dev/null
+        done
+        log "system services: restarted ${SYSTEM_SERVICES[*]}"
+
+        # User drop-in configs
+        run_dropins open
         ;;
 esac
