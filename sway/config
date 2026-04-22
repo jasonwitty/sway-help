@@ -30,11 +30,11 @@ output * scale 1.6
 ### Set brightness and power profile based on AC/battery state
 exec ~/.local/bin/power-startup
 
-### Idle configuration
-exec swayidle -w \
-    timeout 300 'swaylock -f' \
-    timeout 600 'swaymsg "output * power off"' resume 'swaymsg "output * power on"' \
-    before-sleep 'swaylock -f'
+### Disable touchpad while typing (DWT workaround for USB combo device)
+exec ~/.local/bin/trackpad-guard
+
+### Idle configuration (managed by idle-toggle, starts in "on" mode)
+exec ~/.local/bin/idle-toggle on
 
 ### Input configuration
 input type:touchpad {
@@ -217,10 +217,18 @@ bindsym $mod+r mode "resize"
     bindsym --locked XF86MonBrightnessUp exec ~/.local/bin/brightness up
     # Argon battery dashboard
     bindsym Pause exec foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py
-    # Screenshots
+    # Screenshots & screen recording (Mod+Print enters capture mode)
     bindsym Print exec grim
-    bindsym $mod+Print exec grim -g "$(slurp)" - | wl-copy
     bindsym $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
+    bindsym $mod+Print mode "capture"
+
+mode "capture" {
+    bindsym r exec ~/.local/bin/screen-record; mode "default"
+    bindsym a exec ~/.local/bin/screen-record area; mode "default"
+    bindsym s exec grim -g "$(slurp)" - | wl-copy; mode "default"
+    bindsym Escape mode "default"
+    bindsym Return mode "default"
+}
     # Claude
     bindsym $mod+c exec foot -e claude
     bindsym $mod+Shift+c exec ~/.local/bin/claude-prompt

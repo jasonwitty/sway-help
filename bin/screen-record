@@ -1,21 +1,37 @@
 #!/bin/bash
 # Toggle screen recording with wf-recorder
-# First call starts recording, second call stops it.
-# Usage: screen-record [area]
-#   area — select a region with slurp instead of full screen
+# First call starts recording (with countdown), second call stops it.
+# Usage: screen-record [area]    — toggle recording
+#        screen-record status    — JSON for waybar module
 
 VIDEOS_DIR="$HOME/Videos"
 PIDFILE="/tmp/.screen-record.pid"
 
 mkdir -p "$VIDEOS_DIR"
 
+# Waybar status output
+if [ "${1:-}" = "status" ]; then
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        printf '{"text":"󰑊 REC","tooltip":"Recording...\\nMod+Print → r to stop","class":"recording"}\n'
+    else
+        echo '{"text":"","tooltip":"","class":"idle"}'
+    fi
+    exit 0
+fi
+
+# Stop recording if already running
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    # Stop recording
     kill -INT "$(cat "$PIDFILE")"
     rm -f "$PIDFILE"
     notify-send -t 2000 "󰻃 Recording saved" "$VIDEOS_DIR"
     exit 0
 fi
+
+# Countdown before starting
+for i in 3 2 1; do
+    notify-send -t 900 "󰑊 Recording in $i..."
+    sleep 1
+done
 
 FILENAME="$VIDEOS_DIR/$(date +%Y%m%d_%Hh%Mm%Ss).mp4"
 
@@ -28,4 +44,4 @@ else
 fi
 
 echo $! > "$PIDFILE"
-notify-send -t 2000 "󰑊 Recording started" "Press Mod+Shift+R to stop"
+notify-send -t 2000 "󰑊 Recording started" "Mod+Print → r to stop"
