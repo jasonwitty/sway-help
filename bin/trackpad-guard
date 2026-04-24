@@ -6,43 +6,44 @@ for a configurable timeout after each keypress. Works around DWT not
 functioning on USB combo keyboard/touchpad devices (like the AMIRA
 keyboard in the Argon ONE UP case).
 
+The AMIRA presents on two USB interfaces — one paired with the
+touchpad (stub keyboard) and one for the real typing keys. We watch
+all matching keyboard evdev nodes so typing on either is caught.
+
 Requires: input group membership, python3, swaymsg
 """
 
-import os
-import sys
 import glob
-import struct
+import os
 import select
+import signal
+import struct
 import subprocess
+import sys
 import time
 
-TIMEOUT = 0.5  # seconds after last keypress to re-enable
+TIMEOUT = 0.15  # seconds after last keypress to re-enable
 TOUCHPAD = "type:touchpad"
 EVENT_SIZE = 24  # sizeof(struct input_event) on 64-bit
 EV_KEY = 0x01
+KEYBOARD_NAME = "AMIRA-KEYBOAR USB KEYBOARD"  # exact match, no subdevice suffix
 
 
-def find_keyboard():
-    """Find the main keyboard evdev device (not consumer/power subdevices)."""
-    # Try by-id first for stable naming
-    by_id = "/dev/input/by-id/usb-AMIRA-KEYBOAR_USB_KEYBOARD-event-kbd"
-    if os.path.exists(by_id):
-        return os.path.realpath(by_id)
-
-    # Fallback: scan all event devices
+def find_keyboards():
+    """Return evdev paths for all matching keyboard devices (both USB interfaces)."""
+    paths = []
     for sysdir in sorted(glob.glob("/sys/class/input/event*")):
         try:
-            name = open(os.path.join(sysdir, "device/name")).read().strip()
-            if "AMIRA" not in name:
-                continue
-            # Full keyboards have large key capability bitmaps
-            caps = open(os.path.join(sysdir, "device/capabilities/key")).read().strip()
-            if len(caps) > 20:
-                return f"/dev/input/{os.path.basename(sysdir)}"
-        except (OSError, IOError):
+            with open(os.path.join(sysdir, "device/name")) as f:
+                name = f.read().strip()
+        except OSError:
             continue
-    return None
+        # Match the bare keyboard interface only — skip "Consumer Control",
+        # "System Control", "Wireless Radio Control", "Mouse", "Touchpad".
+        if name != KEYBOARD_NAME:
+            continue
+        paths.append(f"/dev/input/{os.path.basename(sysdir)}")
+    return paths
 
 
 def swaymsg_input(state):
@@ -53,49 +54,101 @@ def swaymsg_input(state):
     )
 
 
+def open_keyboards(paths):
+    """Open each path non-blocking; skip any that fail."""
+    fds = {}
+    for path in paths:
+        try:
+            fds[os.open(path, os.O_RDONLY | os.O_NONBLOCK)] = path
+        except OSError as e:
+            print(f"trackpad-guard: cannot open {path}: {e}", file=sys.stderr)
+    return fds
+
+
 def main():
-    kb = find_keyboard()
-    if not kb:
-        print("trackpad-guard: keyboard not found", file=sys.stderr)
+    paths = find_keyboards()
+    if not paths:
+        print(f"trackpad-guard: no '{KEYBOARD_NAME}' device found", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        fd = os.open(kb, os.O_RDONLY | os.O_NONBLOCK)
-    except PermissionError:
-        print("trackpad-guard: permission denied — add user to input group", file=sys.stderr)
+    fds = open_keyboards(paths)
+    if not fds:
+        print("trackpad-guard: no keyboards could be opened (input group?)", file=sys.stderr)
         sys.exit(1)
+
+    print(f"trackpad-guard: watching {len(fds)} keyboard(s): {list(fds.values())}",
+          file=sys.stderr)
 
     disabled = False
     last_key = 0.0
 
-    try:
-        while True:
-            timeout = max(0.01, TIMEOUT - (time.monotonic() - last_key)) if disabled else None
-            ready, _, _ = select.select([fd], [], [], timeout)
+    def cleanup(*_):
+        if disabled:
+            swaymsg_input("enabled")
+        for fd in list(fds):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        sys.exit(0)
 
-            if ready:
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
+    while True:
+        if not fds:
+            # All devices lost — try to rediscover every 2s.
+            time.sleep(2)
+            fds = open_keyboards(find_keyboards())
+            continue
+
+        timeout = max(0.01, TIMEOUT - (time.monotonic() - last_key)) if disabled else None
+        try:
+            ready, _, _ = select.select(list(fds), [], [], timeout)
+        except (OSError, ValueError):
+            ready = []
+
+        for fd in ready:
+            try:
+                data = os.read(fd, EVENT_SIZE * 64)
+            except (BlockingIOError, InterruptedError):
+                continue
+            except OSError:
+                # Device disconnected (e.g. USB replug, suspend/resume).
                 try:
-                    data = os.read(fd, EVENT_SIZE * 64)
-                    for i in range(0, len(data) - EVENT_SIZE + 1, EVENT_SIZE):
-                        _, _, ev_type, _, value = struct.unpack("llHHi", data[i : i + EVENT_SIZE])
-                        if ev_type == EV_KEY and value == 1:  # key press
-                            last_key = time.monotonic()
-                            if not disabled:
-                                swaymsg_input("disabled")
-                                disabled = True
-                except BlockingIOError:
+                    os.close(fd)
+                except OSError:
                     pass
+                del fds[fd]
+                continue
 
-            # Re-enable after timeout
-            if disabled and (time.monotonic() - last_key) >= TIMEOUT:
-                swaymsg_input("enabled")
-                disabled = False
-    except KeyboardInterrupt:
-        pass
-    finally:
-        os.close(fd)
-        swaymsg_input("enabled")
+            if not data:
+                # EOF — treat like disconnect.
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                del fds[fd]
+                continue
+
+            for i in range(0, len(data) - EVENT_SIZE + 1, EVENT_SIZE):
+                _, _, ev_type, _, value = struct.unpack("llHHi", data[i : i + EVENT_SIZE])
+                # value 1 = press, 2 = autorepeat — both count as "still typing"
+                if ev_type == EV_KEY and value in (1, 2):
+                    last_key = time.monotonic()
+                    if not disabled:
+                        swaymsg_input("disabled")
+                        disabled = True
+
+        if disabled and (time.monotonic() - last_key) >= TIMEOUT:
+            swaymsg_input("enabled")
+            disabled = False
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Never leave the touchpad stuck disabled.
+        swaymsg_input("enabled")
+        raise
