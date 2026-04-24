@@ -416,6 +416,12 @@ mkdir -p ~/.local/bin
 cp bin/* ~/.local/bin/
 chmod +x ~/.local/bin/*
 
+# Systemd user units that aren't tied to a specific Rust crate
+mkdir -p "$HOME/.config/systemd/user"
+if compgen -G "systemd/*.service" > /dev/null; then
+    cp systemd/*.service "$HOME/.config/systemd/user/"
+fi
+
 # GTK themes
 mkdir -p ~/.themes
 cp -r gtk-themes/* ~/.themes/

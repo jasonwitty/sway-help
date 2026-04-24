@@ -9,6 +9,7 @@
 STATE_FILE="/tmp/.idle-toggle-mode"
 WATCHER_PID="/tmp/.idle-toggle-watcher.pid"
 CLAUDE_STATE="/tmp/.idle-toggle-claude-active"
+WATCHER_SERVICE="idle-toggle-watcher.service"
 
 SWAYIDLE_CMD=(swayidle -w
     timeout 300 'swaylock -f'
@@ -25,6 +26,9 @@ set_mode() {
 }
 
 stop_watcher() {
+    # Stop the systemd-managed watcher. Also clean up any legacy bare-bash
+    # watcher that may have been left over from before the unit existed.
+    systemctl --user stop "$WATCHER_SERVICE" 2>/dev/null
     if [ -f "$WATCHER_PID" ]; then
         local pid
         pid=$(cat "$WATCHER_PID")
@@ -73,10 +77,16 @@ is_claude_active() {
     [ "$ticks2" -gt "$ticks1" ]
 }
 
-# Background watcher for claude mode: polls every 15 seconds. If Claude
-# is active, ensures swayidle is stopped. If idle for 2 consecutive checks
-# (30s), restarts swayidle.
+# Watcher for claude mode: polls every 15 seconds. If Claude is active,
+# ensures swayidle is stopped. If idle for 2 consecutive checks (30s),
+# restarts swayidle. Runs in the foreground — invoked as `idle-toggle
+# run-watcher` from idle-toggle-watcher.service so systemd handles
+# crashes/kills via Restart=on-failure.
 run_watcher() {
+    # Clean exit on SIGTERM/SIGINT so systemd records exit 0 (no restart loop)
+    # and the claude-active flag is removed for waybar.
+    trap 'rm -f "$CLAUDE_STATE"; exit 0' TERM INT
+
     local idle_count=0
     local swayidle_running=true
 
@@ -159,21 +169,19 @@ do_set() {
             ;;
         claude)
             set_mode claude
-            # Launch watcher in background
-            run_watcher &
-            echo $! > "$WATCHER_PID"
-            disown
+            systemctl --user start "$WATCHER_SERVICE"
             notify-send -t 2000 "󰗚 Screen lock: Claude auto mode"
             ;;
     esac
 }
 
 case "${1:-}" in
-    status)  do_status ;;
-    cycle)   do_cycle ;;
-    on)      do_set on ;;
-    off)     do_set off ;;
-    claude)  do_set claude ;;
+    status)       do_status ;;
+    cycle)        do_cycle ;;
+    on)           do_set on ;;
+    off)          do_set off ;;
+    claude)       do_set claude ;;
+    run-watcher)  run_watcher ;;
     *)
         echo "Usage: idle-toggle {status|cycle|on|off|claude}"
         echo "Current mode: $(get_mode)"
