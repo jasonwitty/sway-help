@@ -469,6 +469,15 @@ if systemctl --user is-active --quiet graphical-session.target 2>/dev/null; then
 fi
 success "argon-lid-monitor user service installed and enabled"
 
+# With argon-battery-rs owning battery polling + CW2217 self-heal, and
+# argon-lid-monitor owning lid events, Argon's Python daemons have nothing
+# left to do. Sway handles media/brightness/power keys natively, so the
+# user daemon (argonkeyboard.py) is also redundant. Disable both.
+info "Disabling Argon's Python daemons (replaced by Rust + sway)..."
+sudo systemctl disable --now argononeupd.service 2>/dev/null || true
+systemctl --user disable --now argononeupduser.service 2>/dev/null || true
+success "Argon Python daemons disabled"
+
 # ---------------------------------------------------------------------------
 # Phase 10: System configuration
 # ---------------------------------------------------------------------------
