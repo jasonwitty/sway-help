@@ -349,6 +349,7 @@ else
 fi
 
 # Patch out the stock battery polling thread (replaced by argon-battery-rs)
+# and the stock lid monitor thread (replaced by argon-lid-monitor).
 if [ -f /etc/argon/argononeupd.py ]; then
     if grep -q '^[[:space:]]*t1\.start()' /etc/argon/argononeupd.py; then
         info "Patching Argon daemon: disabling stock battery polling thread..."
@@ -356,6 +357,15 @@ if [ -f /etc/argon/argononeupd.py ]; then
         success "Battery polling thread disabled"
     else
         success "Battery polling thread already patched"
+    fi
+
+    if grep -q '^[[:space:]]*t2\.start()' /etc/argon/argononeupd.py; then
+        info "Patching Argon daemon: disabling stock lid monitor thread..."
+        sudo sed -i 's/^[[:space:]]*t2 = Thread(target = argonpowerbutton_monitorlid.*$/#&/' /etc/argon/argononeupd.py
+        sudo sed -i 's/^[[:space:]]*t2\.start()/#&/' /etc/argon/argononeupd.py
+        success "Lid monitor thread disabled"
+    else
+        success "Lid monitor thread already patched"
     fi
 else
     warn "Argon daemon script not found at /etc/argon/argononeupd.py — skipping patch"
@@ -416,9 +426,9 @@ sudo cp greetd/config.toml greetd/sway-config greetd/gtkgreet.css greetd/wallpap
 success "Config files copied"
 
 # ---------------------------------------------------------------------------
-# Phase 9: Build argon-battery-rs
+# Phase 9: Build Rust daemons
 # ---------------------------------------------------------------------------
-phase "Phase 9: Build argon-battery-rs"
+phase "Phase 9: Build Rust daemons"
 
 if [ -x /usr/local/bin/argon-battery-rs ]; then
     success "argon-battery-rs already installed"
@@ -426,9 +436,38 @@ else
     info "Building argon-battery-rs (this may take a few minutes)..."
     cd "$REPO_DIR/argon-battery-rs"
     cargo build --release
-    sudo cp target/release/argon-battery-rs /usr/local/bin/
+    sudo install -m 755 target/release/argon-battery-rs /usr/local/bin/argon-battery-rs
     success "argon-battery-rs built and installed"
 fi
+
+if [ -x /usr/local/bin/argon-lid-monitor ]; then
+    success "argon-lid-monitor already installed"
+else
+    info "Building argon-lid-monitor..."
+    cd "$REPO_DIR/argon-lid-monitor"
+    cargo build --release
+    sudo install -m 755 target/release/argon-lid-monitor /usr/local/bin/argon-lid-monitor
+    success "argon-lid-monitor built and installed"
+fi
+
+# User must be in the gpio group to access /dev/gpiochip0 from argon-lid-monitor
+if ! groups | grep -qw gpio; then
+    info "Adding $USER to the gpio group (needed by argon-lid-monitor)..."
+    sudo usermod -aG gpio "$USER"
+    warn "gpio group membership takes effect after next login"
+fi
+
+# Install and enable the argon-lid-monitor user service
+info "Installing argon-lid-monitor systemd user unit..."
+mkdir -p "$HOME/.config/systemd/user"
+cp "$REPO_DIR/argon-lid-monitor/systemd/argon-lid-monitor.service" "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable argon-lid-monitor.service
+# Only start if sway session is up; otherwise it will start at next login
+if systemctl --user is-active --quiet graphical-session.target 2>/dev/null; then
+    systemctl --user start argon-lid-monitor.service
+fi
+success "argon-lid-monitor user service installed and enabled"
 
 # ---------------------------------------------------------------------------
 # Phase 10: System configuration
