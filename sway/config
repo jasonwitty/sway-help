@@ -31,7 +31,6 @@ output * scale 1.6
 exec ~/.local/bin/power-startup
 
 ### Disable touchpad while typing (DWT workaround for USB combo device)
-exec ~/.local/bin/trackpad-guard
 
 ### Idle configuration (managed by idle-toggle, starts in "on" mode)
 exec ~/.local/bin/idle-toggle on

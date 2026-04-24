@@ -1,0 +1,220 @@
+//! Disable sway touchpad while typing.
+//!
+//! Works around DWT (disable-while-typing) not functioning on USB combo
+//! keyboard/touchpad devices like the AMIRA in the Argon ONE UP case.
+//! Watches all matching keyboard evdev nodes (the AMIRA exposes the same
+//! vid:pid on two USB interfaces) and disables `type:touchpad` via swaymsg
+//! while any keys are pressed, re-enabling 150ms after all keys are released.
+//!
+//! Unlike the earlier Python version, this tracks per-key press/release
+//! state rather than "time since last event." The Python script treated
+//! autorepeat (value=2) the same as a press, so any dropped release event
+//! caused kernel-level autorepeat to keep resetting its timer indefinitely
+//! — leaving the touchpad stuck disabled until another key was pressed.
+//! This version ignores autorepeat for state tracking, and a 2s "no events
+//! at all" safety net force-clears state if a release really did go missing.
+
+use evdev::{Device, EventSummary, KeyCode};
+use std::collections::HashSet;
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
+
+const VENDOR_ID: u16 = 0x6080;
+const KEYBOARD_NAME: &str = "AMIRA-KEYBOAR USB KEYBOARD";
+// Note: the AMIRA exposes two USB interfaces with different PIDs (0x8060
+// and 0x8061). We match on vendor + exact name so we catch both — name
+// equality still excludes the Mouse/Touchpad/System Control/Consumer
+// Control/Wireless Radio Control subsystem nodes that share the vid.
+
+/// Grace window after the last key release before re-enabling the touchpad.
+const GRACE: Duration = Duration::from_millis(150);
+
+/// If any key is marked pressed but no events at all have arrived for this
+/// long, assume a release was dropped and force-clear state.
+const STUCK_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Retry interval when no matching keyboards are found at startup.
+const DISCOVER_INTERVAL: Duration = Duration::from_secs(2);
+
+enum Msg {
+    KeyEvent { key: KeyCode, value: i32 },
+    ReaderDied,
+    Shutdown,
+}
+
+fn matches(device: &Device) -> bool {
+    device.input_id().vendor() == VENDOR_ID && device.name() == Some(KEYBOARD_NAME)
+}
+
+fn find_keyboards() -> Vec<(std::path::PathBuf, Device)> {
+    evdev::enumerate()
+        .filter(|(_, d)| matches(d))
+        .collect()
+}
+
+fn spawn_reader(mut device: Device, tx: mpsc::Sender<Msg>) {
+    thread::spawn(move || loop {
+        match device.fetch_events() {
+            Ok(events) => {
+                for ev in events {
+                    if let EventSummary::Key(_, key, value) = ev.destructure() {
+                        if tx.send(Msg::KeyEvent { key, value }).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                let _ = tx.send(Msg::ReaderDied);
+                return;
+            }
+        }
+    });
+}
+
+fn swaymsg(state: &'static str) {
+    let _ = Command::new("swaymsg")
+        .args(["input", "type:touchpad", "events", state])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
+fn main() {
+    let (tx, rx) = mpsc::channel::<Msg>();
+
+    // Signal handler: send shutdown on SIGTERM/SIGINT so the main loop
+    // exits cleanly and re-enables the touchpad.
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    {
+        let tx = tx.clone();
+        let flag = shutdown_flag.clone();
+        ctrlc::set_handler(move || {
+            // First signal: request clean shutdown. Second signal: exit hard
+            // so we don't hang if something's wedged.
+            if flag.swap(true, Ordering::SeqCst) {
+                std::process::exit(130);
+            }
+            let _ = tx.send(Msg::Shutdown);
+        })
+        .expect("failed to install signal handler");
+    }
+
+    // Initial discovery (retry until something shows up).
+    let keyboards = loop {
+        let found = find_keyboards();
+        if !found.is_empty() {
+            break found;
+        }
+        eprintln!("trackpad-guard: no matching keyboards found, retrying in 2s");
+        thread::sleep(DISCOVER_INTERVAL);
+        if shutdown_flag.load(Ordering::SeqCst) {
+            return;
+        }
+    };
+
+    eprintln!(
+        "trackpad-guard: watching {} keyboard(s)",
+        keyboards.len()
+    );
+    let mut readers_alive = keyboards.len();
+    for (_, device) in keyboards {
+        spawn_reader(device, tx.clone());
+    }
+
+    // Make sure we start from a known-enabled state in case a previous run
+    // crashed while the touchpad was disabled.
+    swaymsg("enabled");
+
+    let mut pressed: HashSet<KeyCode> = HashSet::new();
+    let mut disabled = false;
+    let mut last_release: Option<Instant> = None;
+    let mut last_event = Instant::now();
+
+    'main: loop {
+        // Pick a timeout long enough to sleep but short enough to run the
+        // state machine when a timer needs to fire.
+        let timeout = if !disabled {
+            // Nothing to do until an event arrives.
+            Duration::from_secs(3600)
+        } else if !pressed.is_empty() {
+            // Waiting to detect a stuck key.
+            STUCK_TIMEOUT.saturating_sub(last_event.elapsed()) + Duration::from_millis(1)
+        } else if let Some(t) = last_release {
+            // Waiting out the grace period before re-enabling.
+            GRACE.saturating_sub(t.elapsed()) + Duration::from_millis(1)
+        } else {
+            // disabled=true but pressed empty and no last_release — shouldn't
+            // happen, but don't spin.
+            Duration::from_millis(50)
+        };
+
+        match rx.recv_timeout(timeout) {
+            Ok(Msg::KeyEvent { key, value }) => {
+                last_event = Instant::now();
+                match value {
+                    1 => {
+                        pressed.insert(key);
+                        if !disabled {
+                            swaymsg("disabled");
+                            disabled = true;
+                        }
+                        last_release = None;
+                    }
+                    0 => {
+                        pressed.remove(&key);
+                        if pressed.is_empty() {
+                            last_release = Some(Instant::now());
+                        }
+                    }
+                    // value=2 is autorepeat. The key is still logically
+                    // pressed (it's in the set). Nothing to do.
+                    _ => {}
+                }
+            }
+            Ok(Msg::ReaderDied) => {
+                readers_alive = readers_alive.saturating_sub(1);
+                if readers_alive == 0 {
+                    eprintln!("trackpad-guard: all keyboards disconnected, exiting");
+                    break 'main;
+                }
+            }
+            Ok(Msg::Shutdown) => break 'main,
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break 'main,
+        }
+
+        // State machine — run after any event or timeout.
+        if disabled {
+            // Stuck-key safety net: if we still think keys are pressed but
+            // no events have arrived in STUCK_TIMEOUT, a release was dropped.
+            if !pressed.is_empty() && last_event.elapsed() >= STUCK_TIMEOUT {
+                eprintln!(
+                    "trackpad-guard: no events in {:?}, clearing stuck state ({} key(s))",
+                    STUCK_TIMEOUT,
+                    pressed.len()
+                );
+                pressed.clear();
+                last_release = Some(Instant::now());
+            }
+
+            // Grace period expired after all keys released — re-enable.
+            if pressed.is_empty() {
+                if let Some(t) = last_release {
+                    if t.elapsed() >= GRACE {
+                        swaymsg("enabled");
+                        disabled = false;
+                        last_release = None;
+                    }
+                }
+            }
+        }
+    }
+
+    // Always re-enable on exit.
+    swaymsg("enabled");
+}

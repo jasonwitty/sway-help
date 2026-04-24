@@ -450,6 +450,22 @@ else
     success "argon-lid-monitor built and installed"
 fi
 
+if [ -x /usr/local/bin/trackpad-guard ]; then
+    success "trackpad-guard already installed"
+else
+    info "Building trackpad-guard..."
+    cd "$REPO_DIR/trackpad-guard"
+    cargo build --release
+    sudo install -m 755 target/release/trackpad-guard /usr/local/bin/trackpad-guard
+    success "trackpad-guard built and installed"
+fi
+
+# Upgrade path: remove the old Python trackpad-guard and its exec line from sway.
+if [ -f "$HOME/.local/bin/trackpad-guard" ] && head -1 "$HOME/.local/bin/trackpad-guard" | grep -q python; then
+    info "Removing old Python trackpad-guard (replaced by Rust version)..."
+    rm -f "$HOME/.local/bin/trackpad-guard"
+fi
+
 # User must be in the gpio group to access /dev/gpiochip0 from argon-lid-monitor
 if ! groups | grep -qw gpio; then
     info "Adding $USER to the gpio group (needed by argon-lid-monitor)..."
@@ -468,6 +484,16 @@ if systemctl --user is-active --quiet graphical-session.target 2>/dev/null; then
     systemctl --user start argon-lid-monitor.service
 fi
 success "argon-lid-monitor user service installed and enabled"
+
+# Install and enable the trackpad-guard user service
+info "Installing trackpad-guard systemd user unit..."
+cp "$REPO_DIR/trackpad-guard/systemd/trackpad-guard.service" "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable trackpad-guard.service
+if systemctl --user is-active --quiet graphical-session.target 2>/dev/null; then
+    systemctl --user start trackpad-guard.service
+fi
+success "trackpad-guard user service installed and enabled"
 
 # With argon-battery-rs owning battery polling + CW2217 self-heal, and
 # argon-lid-monitor owning lid events, Argon's Python daemons have nothing
