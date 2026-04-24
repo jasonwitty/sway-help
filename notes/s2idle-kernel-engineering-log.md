@@ -740,3 +740,13 @@ floor if it works.
 - **2026-04-14 (session 7)**: All PSCI sleep paths conclusively dead on BCM2712
 - **2026-04-14 (session 7)**: Updated log with full Test D results and final conclusions
 - **2026-04-14 (session 7)**: Added Phase 5 — five alternative approaches beyond PSCI
+- **2026-04-23 (session 8)**: Confirmed the v1/v2 lid-suspend optimizations (`bin/lid-suspend`,
+  `examples/lid-suspend.d/*`, associated sudoers entries) are preserved on this branch for history
+  but are **not being pursued further** — they're the same approaches already disproven in the
+  table at the top of this log (no improvement or worse than baseline). Reverted the daily-driver
+  machine (`qol-improvements` branch + deployed `~/.local/bin/lid-suspend`) to the minimal lid
+  handler (swaylock + display off + powersave governor + rfkill + webcam unbind). Next power
+  work, when resumed, starts from Phase 5 — Approach A (VideoCore mailbox clock/domain gating,
+  especially V3D and HDMI PHY) first, then Approach D (Argon MCU hibernate + NVMe hibernation
+  image). The v1/v2 service/USB/NVMe/ASPM pieces should not be reintroduced without a new
+  measurement method — the existing `lid-power-test` data has already ruled them out.
