@@ -1,6 +1,6 @@
 #!/bin/bash
 # Toggle screen recording with wf-recorder
-# First call starts recording (with countdown), second call stops it.
+# First call starts recording immediately, second call stops it.
 # Usage: screen-record [area]    — toggle recording
 #        screen-record status    — JSON for waybar module
 
@@ -27,18 +27,22 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     exit 0
 fi
 
-# Countdown before starting
-for i in 3 2 1; do
-    notify-send -t 900 "󰑊 Recording in $i..."
-    sleep 1
-done
-
 FILENAME="$VIDEOS_DIR/$(date +%Y%m%d_%Hh%Mm%Ss).mp4"
+
+# wf-recorder 0.5 auto-invokes slurp for area selection if neither -o
+# nor -g is specified — even on a single-output system. Always pass -o
+# with the focused output so the recording starts immediately.
+OUTPUT=$(swaymsg -t get_outputs 2>/dev/null | jq -r '[.[] | select(.focused==true)][0].name // empty')
+if [ -z "$OUTPUT" ]; then
+    OUTPUT=$(swaymsg -t get_outputs 2>/dev/null | jq -r '[.[] | select(.active==true)][0].name // empty')
+fi
 
 if [ "${1:-}" = "area" ]; then
     GEOMETRY=$(slurp 2>/dev/null)
     [ -z "$GEOMETRY" ] && exit 0
     wf-recorder -g "$GEOMETRY" -f "$FILENAME" &
+elif [ -n "$OUTPUT" ]; then
+    wf-recorder -o "$OUTPUT" -f "$FILENAME" &
 else
     wf-recorder -f "$FILENAME" &
 fi

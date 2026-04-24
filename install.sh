@@ -200,7 +200,7 @@ sudo apt install -y \
     ukui-polkit \
     ddcutil i2c-tools \
     fish \
-    bat eza fzf zoxide ugrep \
+    bat eza fzf zoxide ugrep jq \
     grim slurp wl-clipboard wf-recorder libnotify-bin \
     xdg-desktop-portal-wlr \
     fonts-firacode \
