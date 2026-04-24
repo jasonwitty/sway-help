@@ -133,49 +133,53 @@ fn main() {
     let mut pressed: HashSet<KeyCode> = HashSet::new();
     let mut disabled = false;
     let mut last_release: Option<Instant> = None;
-    let mut last_event = Instant::now();
+    // Time of the most recent press or release. Autorepeat (value=2) does
+    // NOT update this — that's the whole point. When a release is dropped,
+    // the kernel keeps firing autorepeats at ~33Hz, so we can't detect a
+    // stuck key by "no events for a while"; we have to detect "only
+    // autorepeats for a while."
+    let mut last_transition = Instant::now();
+    let debug = std::env::var_os("TRACKPAD_GUARD_DEBUG").is_some();
 
     'main: loop {
-        // Pick a timeout long enough to sleep but short enough to run the
-        // state machine when a timer needs to fire.
         let timeout = if !disabled {
-            // Nothing to do until an event arrives.
             Duration::from_secs(3600)
         } else if !pressed.is_empty() {
-            // Waiting to detect a stuck key.
-            STUCK_TIMEOUT.saturating_sub(last_event.elapsed()) + Duration::from_millis(1)
+            // Waiting to detect that only autorepeats have arrived.
+            STUCK_TIMEOUT.saturating_sub(last_transition.elapsed()) + Duration::from_millis(1)
         } else if let Some(t) = last_release {
-            // Waiting out the grace period before re-enabling.
             GRACE.saturating_sub(t.elapsed()) + Duration::from_millis(1)
         } else {
-            // disabled=true but pressed empty and no last_release — shouldn't
-            // happen, but don't spin.
             Duration::from_millis(50)
         };
 
         match rx.recv_timeout(timeout) {
-            Ok(Msg::KeyEvent { key, value }) => {
-                last_event = Instant::now();
-                match value {
-                    1 => {
-                        pressed.insert(key);
-                        if !disabled {
-                            swaymsg("disabled");
-                            disabled = true;
-                        }
-                        last_release = None;
-                    }
-                    0 => {
-                        pressed.remove(&key);
-                        if pressed.is_empty() {
-                            last_release = Some(Instant::now());
+            Ok(Msg::KeyEvent { key, value }) => match value {
+                1 => {
+                    pressed.insert(key);
+                    last_transition = Instant::now();
+                    last_release = None;
+                    if !disabled {
+                        swaymsg("disabled");
+                        disabled = true;
+                        if debug {
+                            eprintln!("trackpad-guard: disabled (press {key:?})");
                         }
                     }
-                    // value=2 is autorepeat. The key is still logically
-                    // pressed (it's in the set). Nothing to do.
-                    _ => {}
                 }
-            }
+                0 => {
+                    pressed.remove(&key);
+                    last_transition = Instant::now();
+                    if pressed.is_empty() {
+                        last_release = Some(Instant::now());
+                    }
+                }
+                // value=2 is autorepeat — the key is still logically held.
+                // Deliberately NOT updating last_transition: that's how we
+                // distinguish "keys really being held" from "missed release
+                // leaving the kernel autorepeating forever."
+                _ => {}
+            },
             Ok(Msg::ReaderDied) => {
                 readers_alive = readers_alive.saturating_sub(1);
                 if readers_alive == 0 {
@@ -188,15 +192,17 @@ fn main() {
             Err(RecvTimeoutError::Disconnected) => break 'main,
         }
 
-        // State machine — run after any event or timeout.
         if disabled {
-            // Stuck-key safety net: if we still think keys are pressed but
-            // no events have arrived in STUCK_TIMEOUT, a release was dropped.
-            if !pressed.is_empty() && last_event.elapsed() >= STUCK_TIMEOUT {
+            // Stuck-key safety net: if any key is marked pressed but we've
+            // seen only autorepeats (no real press or release) for
+            // STUCK_TIMEOUT, a release was dropped by the kernel/USB layer.
+            // Force-clear and let the grace timer re-enable.
+            if !pressed.is_empty() && last_transition.elapsed() >= STUCK_TIMEOUT {
                 eprintln!(
-                    "trackpad-guard: no events in {:?}, clearing stuck state ({} key(s))",
+                    "trackpad-guard: autorepeat-only for {:?}, clearing stuck state ({} key(s): {:?})",
                     STUCK_TIMEOUT,
-                    pressed.len()
+                    pressed.len(),
+                    pressed,
                 );
                 pressed.clear();
                 last_release = Some(Instant::now());
@@ -209,6 +215,9 @@ fn main() {
                         swaymsg("enabled");
                         disabled = false;
                         last_release = None;
+                        if debug {
+                            eprintln!("trackpad-guard: enabled (grace elapsed)");
+                        }
                     }
                 }
             }
