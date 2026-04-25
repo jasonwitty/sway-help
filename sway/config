@@ -216,9 +216,13 @@ bindsym $mod+r mode "resize"
     bindsym --locked XF86MonBrightnessUp exec ~/.local/bin/brightness up
     # Argon battery dashboard
     bindsym Pause exec foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py
-    # Screenshots & screen recording (Mod+Print enters capture mode)
+    # Screenshots & screen recording
     bindsym Print exec grim
     bindsym $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
+    # Direct screen-record toggle. Bypasses the Mod+Print → r capture-mode
+    # chord, which was unreliable because Super is typically still held
+    # when R is pressed, producing Super+R which is bound to resize mode.
+    bindsym $mod+x exec ~/.local/bin/screen-record
     bindsym $mod+Print mode "capture"
 
 mode "capture" {

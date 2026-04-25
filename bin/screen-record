@@ -18,7 +18,7 @@ mkdir -p "$VIDEOS_DIR"
 # Waybar status output
 if [ "${1:-}" = "status" ]; then
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-        printf '{"text":"󰑊 REC","tooltip":"Recording...\\nMod+Print → r to stop","class":"recording"}\n'
+        printf '{"text":"󰑊 REC","tooltip":"Recording...\\nMod+X to stop","class":"recording"}\n'
     else
         echo '{"text":"","tooltip":"","class":"idle"}'
     fi
@@ -67,4 +67,4 @@ else
 fi
 
 echo $! > "$PIDFILE"
-notify-send -t 2000 "󰑊 Recording started" "Mod+Print → r to stop"
+notify-send -t 2000 "󰑊 Recording started" "Mod+X to stop"
