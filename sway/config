@@ -235,6 +235,11 @@ bindsym $mod+r mode "resize"
     bindsym $mod+Shift+c exec ~/.local/bin/claude-prompt
     # Theme switcher
     bindsym $mod+t exec ~/.local/bin/switch-theme --picker
+    # Manual trackpad rescue: if the AMIRA touchpad becomes unresponsive,
+    # this signals trackpad-guard to do a USB unbind+rebind on the
+    # touchpad-paired interface (vid:pid 6080:8061). The daemon also has
+    # an automatic heuristic, but the manual trigger is faster.
+    bindsym $mod+Shift+t exec pkill -USR1 -f /usr/local/bin/trackpad-guard
     # Help overlay
     bindsym $mod+Shift+h exec ~/.local/bin/sway-help
     # Brave browser

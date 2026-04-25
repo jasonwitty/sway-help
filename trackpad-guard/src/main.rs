@@ -15,23 +15,38 @@
 //! at all" safety net force-clears state if a release really did go missing.
 
 use evdev::{Device, EventSummary, KeyCode};
+use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM, SIGUSR1};
+use signal_hook::iterator::Signals;
 use std::collections::HashSet;
-use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 const VENDOR_ID: u16 = 0x6080;
 const KEYBOARD_NAME: &str = "AMIRA-KEYBOAR USB KEYBOARD";
+const TOUCHPAD_NAME: &str = "AMIRA-KEYBOAR USB KEYBOARD Touchpad";
+// USB product ID of the AMIRA interface that the touchpad lives behind.
+const TOUCHPAD_USB_PRODUCT: &str = "8061";
+const TOUCHPAD_USB_VENDOR: &str = "6080";
 // Note: the AMIRA exposes two USB interfaces with different PIDs (0x8060
-// and 0x8061). We match on vendor + exact name so we catch both — name
-// equality still excludes the Mouse/Touchpad/System Control/Consumer
-// Control/Wireless Radio Control subsystem nodes that share the vid.
+// and 0x8061). We match keyboards on vendor + exact name so we catch
+// both — name equality still excludes the Mouse/Touchpad/System Control/
+// Consumer Control/Wireless Radio Control subsystem nodes that share the
+// vid.
 
 /// Grace window after the last key release before re-enabling the touchpad.
 const GRACE: Duration = Duration::from_millis(100);
+
+/// USB rebind heuristic: how recently keyboard activity must have been seen.
+const USB_REBIND_KBD_RECENT: Duration = Duration::from_secs(60);
+/// USB rebind heuristic: how long the touchpad must have been silent.
+const USB_REBIND_TOUCHPAD_SILENT: Duration = Duration::from_secs(120);
+/// Minimum time between automatic USB rebinds.
+const USB_REBIND_COOLDOWN: Duration = Duration::from_secs(300);
+/// Wake at this cadence (when otherwise idle) so the heuristic gets to run.
+const TICK_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Keys we track in the pressed set but which never on their own disable
 /// the touchpad. Holding Super to switch workspaces, Shift to select, Ctrl
@@ -62,21 +77,34 @@ const DISCOVER_INTERVAL: Duration = Duration::from_secs(2);
 
 enum Msg {
     KeyEvent { key: KeyCode, value: i32 },
-    ReaderDied,
+    TouchpadActivity,
+    KeyboardReaderDied,
+    TouchpadReaderDied,
+    ManualRebind,
     Shutdown,
 }
 
-fn matches(device: &Device) -> bool {
+fn matches_keyboard(device: &Device) -> bool {
     device.input_id().vendor() == VENDOR_ID && device.name() == Some(KEYBOARD_NAME)
+}
+
+fn matches_touchpad(device: &Device) -> bool {
+    device.input_id().vendor() == VENDOR_ID && device.name() == Some(TOUCHPAD_NAME)
 }
 
 fn find_keyboards() -> Vec<(std::path::PathBuf, Device)> {
     evdev::enumerate()
-        .filter(|(_, d)| matches(d))
+        .filter(|(_, d)| matches_keyboard(d))
         .collect()
 }
 
-fn spawn_reader(mut device: Device, tx: mpsc::Sender<Msg>) {
+fn find_touchpad() -> Option<Device> {
+    evdev::enumerate()
+        .find(|(_, d)| matches_touchpad(d))
+        .map(|(_, d)| d)
+}
+
+fn spawn_keyboard_reader(mut device: Device, tx: mpsc::Sender<Msg>) {
     thread::spawn(move || loop {
         match device.fetch_events() {
             Ok(events) => {
@@ -89,11 +117,97 @@ fn spawn_reader(mut device: Device, tx: mpsc::Sender<Msg>) {
                 }
             }
             Err(_) => {
-                let _ = tx.send(Msg::ReaderDied);
+                let _ = tx.send(Msg::KeyboardReaderDied);
                 return;
             }
         }
     });
+}
+
+fn spawn_touchpad_reader(mut device: Device, tx: mpsc::Sender<Msg>) {
+    thread::spawn(move || loop {
+        // We only care that *some* event arrived — collapse the batch to a
+        // single TouchpadActivity message to avoid flooding the channel.
+        match device.fetch_events() {
+            Ok(events) => {
+                let n = events.count();
+                if n > 0 {
+                    if tx.send(Msg::TouchpadActivity).is_err() {
+                        return;
+                    }
+                }
+            }
+            Err(_) => {
+                let _ = tx.send(Msg::TouchpadReaderDied);
+                return;
+            }
+        }
+    });
+}
+
+/// Find the AMIRA touchpad's USB device id (e.g. "1-1.6") by vid:pid.
+fn find_touchpad_usb_id() -> Option<String> {
+    for entry in std::fs::read_dir("/sys/bus/usb/devices/").ok()?.flatten() {
+        let path = entry.path();
+        let vendor = std::fs::read_to_string(path.join("idVendor"))
+            .ok()
+            .map(|s| s.trim().to_string());
+        let product = std::fs::read_to_string(path.join("idProduct"))
+            .ok()
+            .map(|s| s.trim().to_string());
+        if vendor.as_deref() == Some(TOUCHPAD_USB_VENDOR)
+            && product.as_deref() == Some(TOUCHPAD_USB_PRODUCT)
+        {
+            return Some(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+/// USB unbind+rebind on the AMIRA touchpad-paired interface. Recovers the
+/// "kernel evdev silent while sysfs reports active" state we keep hitting.
+/// Requires a sudoers entry for `tee` on the unbind/bind sysfs files (the
+/// installer already grants this).
+fn rebind_touchpad_usb() {
+    let id = match find_touchpad_usb_id() {
+        Some(s) => s,
+        None => {
+            eprintln!("trackpad-guard: USB rebind aborted — AMIRA touchpad device not found");
+            return;
+        }
+    };
+    eprintln!("trackpad-guard: USB rebind on {id} (unbind + bind)");
+
+    for path in &[
+        "/sys/bus/usb/drivers/usb/unbind",
+        "/sys/bus/usb/drivers/usb/bind",
+    ] {
+        let mut child = match Command::new("sudo")
+            .arg("-n")
+            .arg("tee")
+            .arg(path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("trackpad-guard: USB rebind: failed to spawn sudo tee {path}: {e}");
+                return;
+            }
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(id.as_bytes());
+            let _ = stdin.write_all(b"\n");
+        }
+        let _ = child.wait();
+        if path.ends_with("unbind") {
+            // Give the device a moment to fully detach before binding back.
+            thread::sleep(Duration::from_millis(500));
+        }
+    }
+    eprintln!("trackpad-guard: USB rebind complete");
 }
 
 fn swaymsg(state: &'static str) {
@@ -107,24 +221,28 @@ fn swaymsg(state: &'static str) {
 fn main() {
     let (tx, rx) = mpsc::channel::<Msg>();
 
-    // Signal handler: send shutdown on SIGTERM/SIGINT so the main loop
-    // exits cleanly and re-enables the touchpad.
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    // Signal handler thread: SIGUSR1 → manual USB rebind request.
+    // SIGTERM/SIGINT/SIGHUP → clean shutdown.
     {
         let tx = tx.clone();
-        let flag = shutdown_flag.clone();
-        ctrlc::set_handler(move || {
-            // First signal: request clean shutdown. Second signal: exit hard
-            // so we don't hang if something's wedged.
-            if flag.swap(true, Ordering::SeqCst) {
-                std::process::exit(130);
+        let mut signals =
+            Signals::new([SIGUSR1, SIGTERM, SIGINT, SIGHUP]).expect("install signal handler");
+        thread::spawn(move || {
+            for sig in signals.forever() {
+                match sig {
+                    SIGUSR1 => {
+                        let _ = tx.send(Msg::ManualRebind);
+                    }
+                    _ => {
+                        let _ = tx.send(Msg::Shutdown);
+                        return;
+                    }
+                }
             }
-            let _ = tx.send(Msg::Shutdown);
-        })
-        .expect("failed to install signal handler");
+        });
     }
 
-    // Initial discovery (retry until something shows up).
+    // Initial keyboard discovery (retry until something shows up).
     let keyboards = loop {
         let found = find_keyboards();
         if !found.is_empty() {
@@ -132,18 +250,23 @@ fn main() {
         }
         eprintln!("trackpad-guard: no matching keyboards found, retrying in 2s");
         thread::sleep(DISCOVER_INTERVAL);
-        if shutdown_flag.load(Ordering::SeqCst) {
-            return;
-        }
     };
 
-    eprintln!(
-        "trackpad-guard: watching {} keyboard(s)",
-        keyboards.len()
-    );
-    let mut readers_alive = keyboards.len();
+    eprintln!("trackpad-guard: watching {} keyboard(s)", keyboards.len());
+    let mut keyboards_alive = keyboards.len();
     for (_, device) in keyboards {
-        spawn_reader(device, tx.clone());
+        spawn_keyboard_reader(device, tx.clone());
+    }
+
+    // Touchpad reader is best-effort — if the device isn't around at start
+    // we skip auto-rebind monitoring and try again after the next rebind.
+    let mut touchpad_alive = false;
+    if let Some(tp) = find_touchpad() {
+        spawn_touchpad_reader(tp, tx.clone());
+        touchpad_alive = true;
+        eprintln!("trackpad-guard: watching touchpad evdev for auto-rebind");
+    } else {
+        eprintln!("trackpad-guard: touchpad evdev not found at startup; auto-rebind disabled");
     }
 
     // Make sure we start from a known-enabled state in case a previous run
@@ -159,14 +282,24 @@ fn main() {
     // stuck key by "no events for a while"; we have to detect "only
     // autorepeats for a while."
     let mut last_transition = Instant::now();
+    // Auto-rebind state. Initialise so the heuristic can't fire until at
+    // least one keyboard event AND one touchpad-silent window have actually
+    // accumulated since startup.
+    let mut last_keyboard_event = Instant::now() - USB_REBIND_KBD_RECENT;
+    let mut last_touchpad_event = Instant::now();
+    let mut last_rebind = Instant::now() - USB_REBIND_COOLDOWN;
     let debug = std::env::var_os("TRACKPAD_GUARD_DEBUG").is_some();
 
     'main: loop {
+        // Cap the timeout so the heuristic gets a chance to run periodically
+        // even when nothing's happening on the input front.
         let timeout = if !disabled {
-            Duration::from_secs(3600)
+            TICK_INTERVAL
         } else if !pressed.is_empty() {
-            // Waiting to detect that only autorepeats have arrived.
-            STUCK_TIMEOUT.saturating_sub(last_transition.elapsed()) + Duration::from_millis(1)
+            STUCK_TIMEOUT
+                .saturating_sub(last_transition.elapsed())
+                .min(TICK_INTERVAL)
+                + Duration::from_millis(1)
         } else if let Some(t) = last_release {
             GRACE.saturating_sub(t.elapsed()) + Duration::from_millis(1)
         } else {
@@ -174,49 +307,101 @@ fn main() {
         };
 
         match rx.recv_timeout(timeout) {
-            Ok(Msg::KeyEvent { key, value }) => match value {
-                1 => {
-                    pressed.insert(key);
-                    last_transition = Instant::now();
-                    last_release = None;
-                    // Only non-modifiers trigger the disable. Modifiers stay
-                    // in the `pressed` set (so "still typing" stays accurate
-                    // while they're held) but never on their own flip the
-                    // touchpad off.
-                    if !disabled && !is_modifier(key) {
-                        swaymsg("disabled");
-                        disabled = true;
-                        if debug {
-                            eprintln!("trackpad-guard: disabled (press {key:?})");
+            Ok(Msg::KeyEvent { key, value }) => {
+                last_keyboard_event = Instant::now();
+                match value {
+                    1 => {
+                        pressed.insert(key);
+                        last_transition = Instant::now();
+                        last_release = None;
+                        // Only non-modifiers trigger the disable. Modifiers
+                        // stay in the `pressed` set (so "still typing"
+                        // stays accurate while they're held) but never on
+                        // their own flip the touchpad off.
+                        if !disabled && !is_modifier(key) {
+                            swaymsg("disabled");
+                            disabled = true;
+                            if debug {
+                                eprintln!("trackpad-guard: disabled (press {key:?})");
+                            }
                         }
                     }
-                }
-                0 => {
-                    pressed.remove(&key);
-                    last_transition = Instant::now();
-                    // Start the grace timer when no non-modifier keys remain
-                    // (typing stopped). Dangling modifier holds don't keep
-                    // the touchpad off.
-                    if pressed.iter().all(|k| is_modifier(*k)) {
-                        last_release = Some(Instant::now());
+                    0 => {
+                        pressed.remove(&key);
+                        last_transition = Instant::now();
+                        // Start the grace timer when no non-modifier keys
+                        // remain (typing stopped). Dangling modifier holds
+                        // don't keep the touchpad off.
+                        if pressed.iter().all(|k| is_modifier(*k)) {
+                            last_release = Some(Instant::now());
+                        }
                     }
+                    // value=2 is autorepeat — the key is still logically
+                    // held. Deliberately NOT updating last_transition.
+                    _ => {}
                 }
-                // value=2 is autorepeat — the key is still logically held.
-                // Deliberately NOT updating last_transition: that's how we
-                // distinguish "keys really being held" from "missed release
-                // leaving the kernel autorepeating forever."
-                _ => {}
-            },
-            Ok(Msg::ReaderDied) => {
-                readers_alive = readers_alive.saturating_sub(1);
-                if readers_alive == 0 {
+            }
+            Ok(Msg::TouchpadActivity) => {
+                last_touchpad_event = Instant::now();
+            }
+            Ok(Msg::KeyboardReaderDied) => {
+                keyboards_alive = keyboards_alive.saturating_sub(1);
+                if keyboards_alive == 0 {
                     eprintln!("trackpad-guard: all keyboards disconnected, exiting");
                     break 'main;
+                }
+            }
+            Ok(Msg::TouchpadReaderDied) => {
+                // Likely a USB rebind we initiated, or an accidental
+                // disconnect. Mark as gone; rediscovery happens below.
+                touchpad_alive = false;
+            }
+            Ok(Msg::ManualRebind) => {
+                if last_rebind.elapsed() < Duration::from_secs(5) {
+                    eprintln!("trackpad-guard: SIGUSR1 ignored (rate-limited)");
+                } else {
+                    eprintln!("trackpad-guard: SIGUSR1 — manual USB rebind requested");
+                    rebind_touchpad_usb();
+                    last_rebind = Instant::now();
+                    last_touchpad_event = Instant::now();
+                    touchpad_alive = false;
                 }
             }
             Ok(Msg::Shutdown) => break 'main,
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break 'main,
+        }
+
+        // Auto-rebind heuristic: keyboard activity is recent, the touchpad
+        // evdev has been silent for a while, and we haven't rebinded
+        // recently. Only meaningful if we actually have a touchpad reader.
+        if touchpad_alive
+            && last_keyboard_event.elapsed() < USB_REBIND_KBD_RECENT
+            && last_touchpad_event.elapsed() > USB_REBIND_TOUCHPAD_SILENT
+            && last_rebind.elapsed() > USB_REBIND_COOLDOWN
+        {
+            eprintln!(
+                "trackpad-guard: typing in last {:?} but no touchpad events for {:?} — auto USB rebind",
+                last_keyboard_event.elapsed(),
+                last_touchpad_event.elapsed(),
+            );
+            rebind_touchpad_usb();
+            last_rebind = Instant::now();
+            last_touchpad_event = Instant::now();
+            touchpad_alive = false;
+        }
+
+        // Re-discover touchpad after a rebind (or first-time-found if it
+        // was missing at startup). Hold off briefly after a rebind so the
+        // old reader thread has time to error out — otherwise we race
+        // between spawning a new reader and the old one's
+        // TouchpadReaderDied, occasionally ending up with two readers.
+        if !touchpad_alive && last_rebind.elapsed() > Duration::from_millis(1500) {
+            if let Some(tp) = find_touchpad() {
+                spawn_touchpad_reader(tp, tx.clone());
+                touchpad_alive = true;
+                eprintln!("trackpad-guard: touchpad evdev (re)attached");
+            }
         }
 
         if disabled {

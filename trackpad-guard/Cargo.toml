@@ -7,4 +7,4 @@ license = "Apache-2.0"
 
 [dependencies]
 evdev = "0.13"
-ctrlc = "3"
+signal-hook = "0.3"
