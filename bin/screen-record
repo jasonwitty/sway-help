@@ -56,14 +56,20 @@ if [ -z "$OUTPUT" ]; then
     OUTPUT=$(swaymsg -t get_outputs 2>/dev/null | jq -r '[.[] | select(.active==true)][0].name // empty')
 fi
 
+# `9>&-` closes the lock fd in the forked child so wf-recorder doesn't
+# inherit it — otherwise the lock is held for the entire recording and
+# the next Mod+X press thinks a toggle is "already in progress".
+# `nice -n 10` lowers CPU priority so sway stays responsive during the
+# software H.264 encode (Pi 5 has no hardware encoder — all 4 cores get
+# busy).
 if [ "${1:-}" = "area" ]; then
     GEOMETRY=$(slurp 2>/dev/null)
     [ -z "$GEOMETRY" ] && exit 0
-    wf-recorder -r "$FPS" -g "$GEOMETRY" -f "$FILENAME" &
+    nice -n 10 wf-recorder -r "$FPS" -g "$GEOMETRY" -f "$FILENAME" 9>&- &
 elif [ -n "$OUTPUT" ]; then
-    wf-recorder -r "$FPS" -o "$OUTPUT" -f "$FILENAME" &
+    nice -n 10 wf-recorder -r "$FPS" -o "$OUTPUT" -f "$FILENAME" 9>&- &
 else
-    wf-recorder -r "$FPS" -f "$FILENAME" &
+    nice -n 10 wf-recorder -r "$FPS" -f "$FILENAME" 9>&- &
 fi
 
 echo $! > "$PIDFILE"
