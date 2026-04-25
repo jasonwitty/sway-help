@@ -217,13 +217,11 @@ bindsym $mod+r mode "resize"
     # Argon battery dashboard
     bindsym Pause exec foot -e sudo /usr/bin/python3 /etc/argon/argondashboard.py
     # Screenshots & screen recording
-    # Print            — full-screen screenshot saved to file (grim default)
-    # Mod+Print        — area screenshot to clipboard
-    # Mod+Shift+s      — area screenshot to clipboard (same; kept for muscle memory)
-    # Mod+X            — toggle screen recording (full screen, via ~/.local/bin/screen-record)
+    # Print       — full-screen screenshot saved to file (grim default)
+    # Mod+Print   — area screenshot to clipboard
+    # Mod+X       — toggle screen recording (full screen, via ~/.local/bin/screen-record)
     bindsym Print exec grim
     bindsym $mod+Print exec grim -g "$(slurp)" - | wl-copy
-    bindsym $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
     bindsym $mod+x exec ~/.local/bin/screen-record
     # Claude
     bindsym $mod+c exec foot -e claude
