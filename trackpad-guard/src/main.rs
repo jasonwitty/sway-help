@@ -31,7 +31,7 @@ const KEYBOARD_NAME: &str = "AMIRA-KEYBOAR USB KEYBOARD";
 // Control/Wireless Radio Control subsystem nodes that share the vid.
 
 /// Grace window after the last key release before re-enabling the touchpad.
-const GRACE: Duration = Duration::from_millis(150);
+const GRACE: Duration = Duration::from_millis(100);
 
 /// Keys we track in the pressed set but which never on their own disable
 /// the touchpad. Holding Super to switch workspaces, Shift to select, Ctrl
