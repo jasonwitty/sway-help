@@ -3,9 +3,15 @@
 # First call starts recording immediately, second call stops it.
 # Usage: screen-record [area]    — toggle recording
 #        screen-record status    — JSON for waybar module
+#
+# Pi 5 has no hardware H.264 encoder — wf-recorder uses libx264 across
+# all 4 cores. We lock the codec to 30fps so encoder warmup is bearable
+# and the system doesn't stall during recording.
 
 VIDEOS_DIR="$HOME/Videos"
 PIDFILE="/tmp/.screen-record.pid"
+LOCKFILE="/tmp/.screen-record.lock"
+FPS=30
 
 mkdir -p "$VIDEOS_DIR"
 
@@ -19,6 +25,14 @@ if [ "${1:-}" = "status" ]; then
     exit 0
 fi
 
+# Serialize toggle invocations so spam-pressing doesn't race two starts
+# into existence, leaving an orphan wf-recorder that hogs encode capacity.
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    notify-send -t 1500 "󰻃 Recording busy" "Toggle already in progress"
+    exit 0
+fi
+
 # Stop recording if already running
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     kill -INT "$(cat "$PIDFILE")"
@@ -26,6 +40,11 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     notify-send -t 2000 "󰻃 Recording saved" "$VIDEOS_DIR"
     exit 0
 fi
+
+# Acknowledge the keypress immediately. wf-recorder + libx264 take a
+# noticeable moment to warm up on the Pi 5; the user gets fast feedback
+# that something is happening rather than a silent multi-second wait.
+notify-send -t 1500 "󰑊 Starting recording..." "$FPS fps"
 
 FILENAME="$VIDEOS_DIR/$(date +%Y%m%d_%Hh%Mm%Ss).mp4"
 
@@ -40,11 +59,11 @@ fi
 if [ "${1:-}" = "area" ]; then
     GEOMETRY=$(slurp 2>/dev/null)
     [ -z "$GEOMETRY" ] && exit 0
-    wf-recorder -g "$GEOMETRY" -f "$FILENAME" &
+    wf-recorder -r "$FPS" -g "$GEOMETRY" -f "$FILENAME" &
 elif [ -n "$OUTPUT" ]; then
-    wf-recorder -o "$OUTPUT" -f "$FILENAME" &
+    wf-recorder -r "$FPS" -o "$OUTPUT" -f "$FILENAME" &
 else
-    wf-recorder -f "$FILENAME" &
+    wf-recorder -r "$FPS" -f "$FILENAME" &
 fi
 
 echo $! > "$PIDFILE"
