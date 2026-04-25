@@ -39,7 +39,14 @@ exec ~/.local/bin/idle-toggle on
 input type:touchpad {
     tap enabled
     natural_scroll enabled
-    dwt enabled
+    # libinput's disable-while-typing is intentionally OFF here — the AMIRA
+    # exposes keyboard and touchpad on different USB interfaces (different
+    # vid:pid), so libinput can't correlate them and its DWT was getting
+    # stuck (touchpad would stop responding, sometimes for many minutes).
+    # The Rust trackpad-guard daemon handles this correctly by watching
+    # AMIRA evdev events directly.
+    dwt disabled
+    dwtp disabled
 }
 
 ### Wob (overlay bar for brightness/volume)

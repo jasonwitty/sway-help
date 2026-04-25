@@ -422,6 +422,11 @@ if compgen -G "systemd/*.service" > /dev/null; then
     cp systemd/*.service "$HOME/.config/systemd/user/"
 fi
 
+# mpv config — Pi 5 needs OpenGL via wayland-egl and the fast profile;
+# default Vulkan path crashes on fullscreen toggle.
+mkdir -p "$HOME/.config/mpv"
+cp mpv/mpv.conf "$HOME/.config/mpv/mpv.conf"
+
 # GTK themes
 mkdir -p ~/.themes
 cp -r gtk-themes/* ~/.themes/
