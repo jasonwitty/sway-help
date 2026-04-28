@@ -210,12 +210,26 @@ fn rebind_touchpad_usb() {
     eprintln!("trackpad-guard: USB rebind complete");
 }
 
+/// Synchronously tell sway to enable/disable the touchpad. We *must* wait
+/// for the child to exit, otherwise back-to-back disable/enable calls race
+/// each other to the sway IPC socket — two parallel `swaymsg` processes
+/// don't preserve issue order, and the `enabled` command can land at sway
+/// before the `disabled` one. Result: sway sees `disabled` last and the
+/// touchpad stays off, while our in-process state thinks we re-enabled it.
+/// That was the "stuck → type → unstuck" symptom that's been plaguing us.
 fn swaymsg(state: &'static str) {
-    let _ = Command::new("swaymsg")
+    let status = Command::new("swaymsg")
         .args(["input", "type:touchpad", "events", state])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if let Err(e) = status {
+        eprintln!("trackpad-guard: swaymsg {state} failed to run: {e}");
+    } else if let Ok(s) = status {
+        if !s.success() {
+            eprintln!("trackpad-guard: swaymsg {state} exited {s}");
+        }
+    }
 }
 
 fn main() {
