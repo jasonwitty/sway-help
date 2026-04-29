@@ -42,11 +42,11 @@ const GRACE: Duration = Duration::from_millis(100);
 /// USB rebind heuristic: how recently keyboard activity must have been seen.
 const USB_REBIND_KBD_RECENT: Duration = Duration::from_secs(60);
 /// USB rebind heuristic: how long the touchpad must have been silent.
-const USB_REBIND_TOUCHPAD_SILENT: Duration = Duration::from_secs(120);
+const USB_REBIND_TOUCHPAD_SILENT: Duration = Duration::from_secs(20);
 /// Minimum time between automatic USB rebinds.
-const USB_REBIND_COOLDOWN: Duration = Duration::from_secs(300);
+const USB_REBIND_COOLDOWN: Duration = Duration::from_secs(120);
 /// Wake at this cadence (when otherwise idle) so the heuristic gets to run.
-const TICK_INTERVAL: Duration = Duration::from_secs(15);
+const TICK_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Keys we track in the pressed set but which never on their own disable
 /// the touchpad. Holding Super to switch workspaces, Shift to select, Ctrl
@@ -357,6 +357,9 @@ fn main() {
             }
             Ok(Msg::TouchpadActivity) => {
                 last_touchpad_event = Instant::now();
+                if debug {
+                    eprintln!("trackpad-guard: touchpad activity");
+                }
             }
             Ok(Msg::KeyboardReaderDied) => {
                 keyboards_alive = keyboards_alive.saturating_sub(1);
